@@ -1,0 +1,3 @@
+DB_SERVER   = "DESKTOP-MVNE0M6\SQLEXPRESS"
+DB_DATABASE = "GestionRH_Intelligente"
+DB_DRIVER   = "ODBC Driver 17 for SQL Server"
