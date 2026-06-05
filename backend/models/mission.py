@@ -4,7 +4,7 @@ from typing import Optional
 @dataclass
 class Mission:
     mission_id: int
-    lieu: Optional[str]
+    lieu_mission: Optional[str]
     date_debut: Optional[str]
     date_fin: Optional[str]
     type_mission: Optional[str]

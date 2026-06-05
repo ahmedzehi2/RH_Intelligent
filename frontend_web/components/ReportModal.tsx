@@ -2,51 +2,62 @@ import { X } from "lucide-react"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import * as XLSX from "xlsx"
+import { formatMinutes } from "@/lib/utils"
 
 export default function ReportModal({ data, onClose }: { data: any; onClose: () => void }) {
   if (!data) return null
 
+  const depts = data.par_dept || data.presenceDepts || []
+  const insights = data.top_insights || data.alertes || []
+  const kpi = data.kpi || {}
+
   const exportPDF = () => {
     const doc = new jsPDF()
     doc.setFontSize(16)
-    doc.text('Rapport RH — ' + data.meta.periode, 14, 20)
+    doc.text('Rapport RH — ' + (data.meta?.periode || ''), 14, 20)
 
     autoTable(doc, {
       startY: 30,
       head: [['Indicateur', 'Valeur']],
       body: [
-        ['Taux absentéisme', data.kpi.taux_absenteisme + '%'],
-        ['Taux de retard',   data.kpi.taux_retard + '%'],
-        ['Heures travaillées', data.kpi.heures_total + 'h'],
-        ['Congés consommés', data.kpi.conges + ' jours'],
+        ['Taux absentéisme', (kpi.taux_absenteisme || 0) + '%'],
+        ['Taux de retard',   (kpi.taux_retard || 0) + '%'],
+        ['Heures travaillées', formatMinutes(kpi.heures_total || 0)],
+        ['Congés consommés', (kpi.conges || 0) + ' jours'],
       ]
     })
     
     // Add additional sections to PDF
-    autoTable(doc, {
-      startY: (doc as any).lastAutoTable.finalY + 15,
-      head: [['Département', 'Employés', 'Taux Présence']],
-      body: data.par_dept.map((d: any) => [d.nom, d.nb_emp, d.taux + '%'])
-    })
+    if (depts.length > 0) {
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 15,
+        head: [['Département', 'Employés', 'Taux Présence']],
+        body: depts.map((d: any) => [d.nom || 'N/A', d.nb_emp || 0, (d.taux || 0) + '%'])
+      })
+    }
 
-    doc.save(`rapport-rh-${data.meta.periode}.pdf`)
+    doc.save(`rapport-rh-${data.meta?.periode || 'export'}.pdf`)
   }
 
   const exportExcel = () => {
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([data.kpi]), 'KPI')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([kpi]), 'KPI')
     
     // Unroll nested arrays for excel
-    const flatDepts = data.par_dept.map((d: any) => ({
+    const flatDepts = depts.map((d: any) => ({
       ID: d.id,
       Nom: d.nom,
       Employes: d.nb_emp,
       Taux_Presence: d.taux
     }))
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(flatDepts), 'Départements')
+    if (flatDepts.length > 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(flatDepts), 'Départements')
+    }
     
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.top_insights), 'Insights')
-    XLSX.writeFile(wb, `rapport-rh-${data.meta.periode}.xlsx`)
+    if (insights.length > 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(insights), 'Insights')
+    }
+    XLSX.writeFile(wb, `rapport-rh-${data.meta?.periode || 'export'}.xlsx`)
   }
 
   return (
@@ -57,7 +68,7 @@ export default function ReportModal({ data, onClose }: { data: any; onClose: () 
           <div>
             <h2 className="text-xl font-bold text-gray-800">Rapport RH Consolidé</h2>
             <p className="text-sm text-gray-500 mt-1">
-              Période : {data.meta.periode} — Effectif couvert : {data.meta.nb_employes} employés
+              Période : {data.meta?.periode || 'N/A'} — Effectif couvert : {data.meta?.nb_employes || 0} employés
             </p>
           </div>
           <div className="flex gap-2">
@@ -82,19 +93,19 @@ export default function ReportModal({ data, onClose }: { data: any; onClose: () 
             <div className="grid grid-cols-4 gap-4">
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                 <p className="text-xs text-gray-500 uppercase font-semibold">Taux d'absentéisme</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1">{data.kpi.taux_absenteisme}%</p>
+                <p className="text-2xl font-bold text-gray-800 mt-1">{kpi.taux_absenteisme || 0}%</p>
               </div>
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                 <p className="text-xs text-gray-500 uppercase font-semibold">Taux de retard</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1">{data.kpi.taux_retard}%</p>
+                <p className="text-2xl font-bold text-gray-800 mt-1">{kpi.taux_retard || 0}%</p>
               </div>
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                 <p className="text-xs text-gray-500 uppercase font-semibold">Heures moy. / jour</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1">{data.kpi.heures_moy_employe}h</p>
+                <p className="text-2xl font-bold text-gray-800 mt-1">{formatMinutes(kpi.heures_moy_employe || kpi.heures_moy_jour || 0)}</p>
               </div>
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                 <p className="text-xs text-gray-500 uppercase font-semibold">Congés consommés</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1">{data.kpi.conges} j</p>
+                <p className="text-2xl font-bold text-gray-800 mt-1">{kpi.conges || 0} j</p>
               </div>
             </div>
           </section>
@@ -102,13 +113,16 @@ export default function ReportModal({ data, onClose }: { data: any; onClose: () 
           <section>
             <h3 className="text-sm font-bold text-gray-700 uppercase tracking-widest mb-3 border-b pb-1">Insights Automatiques</h3>
             <div className="space-y-2">
-              {data.top_insights.length === 0 && <p className="text-sm text-gray-500">Aucun insight majeur sur cette période.</p>}
-              {data.top_insights.map((insight: any, i: number) => (
-                <div key={i} className="flex items-start gap-3 text-sm text-gray-700 bg-indigo-50/50 rounded-lg p-3 border border-indigo-100">
-                  <span className="text-lg">{insight.icon}</span>
-                  <span className="leading-relaxed">{insight.message}</span>
-                </div>
-              ))}
+              {insights.length === 0 && <p className="text-sm text-gray-500">Aucun insight majeur sur cette période.</p>}
+              {insights.map((insight: any, i: number) => {
+                const icon = insight.icon || (insight.niveau === "danger" ? "🔴" : insight.niveau === "warning" ? "🟠" : "🟢")
+                return (
+                  <div key={i} className="flex items-start gap-3 text-sm text-gray-700 bg-indigo-50/50 rounded-lg p-3 border border-indigo-100">
+                    <span className="text-lg">{icon}</span>
+                    <span className="leading-relaxed">{insight.message}</span>
+                  </div>
+                )
+              })}
             </div>
           </section>
         </div>

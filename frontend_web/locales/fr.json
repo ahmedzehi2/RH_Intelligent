@@ -1,0 +1,10 @@
+{
+  "settings": "Paramètres",
+  "settings.theme": "Thème",
+  "settings.language": "Langue",
+  "theme.light": "Mode clair",
+  "theme.dark": "Mode sombre",
+  "language.fr": "Français",
+  "language.en": "English",
+  "settings.open": "Ouvrir les paramètres"
+}

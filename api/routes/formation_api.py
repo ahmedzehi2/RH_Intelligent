@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
+from typing import Optional, List
 
 from backend.services.formation_service import FormationService
 
@@ -13,6 +14,15 @@ def verify_admin_role(x_user_role: str | None = Header(None, alias="X-User-Role"
     return True
 
 
+class JourProgramme(BaseModel):
+    jour:    str
+    date:    str   # YYYY-MM-DD
+    heure_debut: Optional[str] = None
+    heure_fin: Optional[str] = None
+    titre:   str
+    details: Optional[str] = None
+
+
 class FormationPayload(BaseModel):
     titre: str
     description: str | None = None
@@ -24,6 +34,16 @@ class FormationPayload(BaseModel):
     organisateur: str | None = None
     type_formation: str | None = None
     lieu: str | None = None
+    heure_debut: Optional[str] = None
+    heure_fin: Optional[str] = None
+    programme_details: Optional[List[JourProgramme]] = None
+
+    @validator("heure_fin")
+    def heure_fin_apres_debut(cls, v, values):
+        debut = values.get("heure_debut")
+        if debut and v and v <= debut:
+            raise ValueError("heure_fin doit être après heure_debut")
+        return v
 
 
 class FormationUpdatePayload(FormationPayload):

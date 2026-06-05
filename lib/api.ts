@@ -68,6 +68,8 @@ export type UserProfile = {
   nom: string
   prenom: string
   email: string
+  matricule?: string
+  nom_departement?: string
 }
 
 export type EmployeRow = {
@@ -87,6 +89,15 @@ export type EmployeRow = {
   nom_departement: string | null
   sous_departement: string | null
   role: string | null
+  email_personnel?: string | null
+  telephone?: string | null
+  cin?: string | null
+  adresse?: string | null
+  salaire?: number | null
+  diplome?: string | null
+  niveau_etude?: string | null
+  observations?: string | null
+  notes_rh?: string | null
 }
 
 // ========================
@@ -126,6 +137,8 @@ export type PlanningJourRow = {
     duree_pause: number | null
     duree_travail: number | null
     retard_minutes: number | null
+    statut?: string | null
+    sous_statut?: string | null
   }
 }
 
@@ -143,8 +156,11 @@ export type EmployeeCalendarDayRow = {
   statut: "Present" | "En retard" | "Retard" | "Absent" | "Conge" | "Mission" | "Formation" | "Repos" | string
   heure_entree: string | null
   heure_sortie: string | null
+  heure_entree_pause?: string | null
+  heure_sortie_pause?: string | null
   duree_travail: number | null
   retard_minutes: number | null
+  sous_statut?: string | null
   type_conge?: string | null
   type_mission?: string | null
   type_formation?: string | null
@@ -161,6 +177,55 @@ export type AbsentRow = {
   matricule: string | null
   departement: string | null
   statut: string
+}
+
+export type StatutAbsence =
+  | "EN_ATTENTE"
+  | "JUSTIFIEE"
+  | "NON_JUSTIFIEE"
+  | "REFUSEE"
+
+export type SourceJustification =
+  | "Congé"
+  | "Mission"
+  | "Formation"
+  | "Document"
+  | "RH"
+  | null
+
+export interface AbsenceEmployeJour {
+  employe_id:           number
+  nom:                  string
+  prenom:               string
+  matricule?:           string | null
+  departement?:         string | null
+  poste?:               string | null
+  statut:               StatutAbsence
+  sous_statut?:         string | null
+  absence_id?:          number | null
+  absence_motif?:       string | null
+  absence_type?:        string | null
+  date_absence?:        string | null
+  source_justification: SourceJustification
+  motif?:               string | null
+  periode?:             string | null
+  is_conge?:            boolean
+  conge_type?:          string | null
+  commentaire_rh?:      string | null
+  date_traitement?:     string | null
+}
+
+export interface RHAbsenceJourResponse {
+  ok:                  boolean
+  date:                string
+  total:               number
+  stats: {
+    pending:   number
+    justified: number
+    total:     number
+  }
+  pending_absences:    AbsenceEmployeJour[]
+  justified_absences:  AbsenceEmployeJour[]
 }
 
 export type MonthlyStatRow = {
@@ -316,12 +381,28 @@ export const employeApi = {
 
   supprimer: (id: number) =>
     del<ApiResponse>(`/employe/supprimer/${id}`),
+
+  sendWelcomeEmail: (employe_id: number, email_override?: string) =>
+    post<ApiResponse>("/employe/send-welcome-email", { employe_id, email_override }),
+
+  sendCustomEmail: (data: { employe_id?: number; email: string; subject: string; message: string }) =>
+    post<ApiResponse>("/employe/send-custom-email", data),
+  
+  sendCredentialsEmail: (employe_id: number, password?: string) =>
+    post<ApiResponse>("/employe/send-credentials", { employe_id, password }),
 }
 
 
 export const utilisateurApi = {
   updatePassword: (userId: number, password: string) =>
     put<ApiResponse>(`/utilisateur/${userId}/mot-de-passe`, { password }),
+    
+  getStatusByEmployeId: (employeId: number) =>
+    get<ApiResponse<{ 
+      user_id: number; 
+      password_exists: boolean; 
+      password_updated_at: string | null 
+    }>>(`/utilisateur/employe/${employeId}/status`),
 }
 
 
@@ -442,7 +523,7 @@ export const documentApi = {
 
 export type MissionRow = {
   mission_id: number
-  lieu: string | null
+  lieu_mission: string | null
   date_debut: string | null
   date_fin: string | null
   type_mission: string | null
@@ -454,7 +535,7 @@ export type MissionRow = {
 export const missionApi = {
   demander: (emp: number, lieu: string, dd: string, df: string, type: string) =>
     post<ApiResponse<{ mission_id: number }>>("/mission/demander", {
-      employe_id: emp, lieu, date_debut: dd, date_fin: df, type_mission: type
+      employe_id: emp, lieu_mission: lieu, date_debut: dd, date_fin: df, type_mission: type
     }),
 
   valider: (id: number, valide_par: number) =>
@@ -515,6 +596,103 @@ export const absenceApi = {
 
   byEmploye: (id: number) =>
     get<ApiResponse<{ count: number; absences: AbsenceRow[] }>>(`/absence/employe/${id}`),
+}
+
+export type RhAbsenceItem = {
+  absence_id?: number | null
+  date_absence: string
+  employe_id: number
+  nom: string
+  prenom: string
+  matricule?: string | null
+  departement?: string | null
+  poste?: string | null
+  statut: "EN_ATTENTE" | "JUSTIFIEE" | "REFUSEE" | string
+  statut_traitement: "EN_ATTENTE" | "JUSTIFIEE" | "REFUSEE" | string
+  statut_rh: string
+  classification: "PENDING" | "JUSTIFIED"
+  requires_action: boolean
+  justifiee: boolean
+  motif: string
+  absence_motif: string
+  absence_type?: string | null
+  etat?: string | null
+  sous_statut?: string | null
+  commentaire_rh?: string | null
+  date_traitement?: string | null
+  source_justification?: "CONGE" | "MISSION" | "FORMATION" | "DOCUMENT" | "RH" | string | null
+  source_label?: string | null
+  periode?: string | null
+  conge_id?: number | null
+  mission_id?: number | null
+  formation_id?: number | null
+  document_id?: number | null
+}
+
+export type RhAbsenceDayResponse = {
+  date: string
+  pending_absences: RhAbsenceItem[]
+  justified_absences: RhAbsenceItem[]
+  stats: {
+    pending: number
+    justified: number
+    total: number
+  }
+}
+
+export type RhAbsenceCalendarDay = {
+  date: string
+  pending: number
+  justified: number
+  total: number
+  calendar_state: "red" | "green" | "orange" | "gray"
+}
+
+export type RhAbsenceCalendarResponse = {
+  ok: boolean
+  month: string
+  total: number
+  days: RhAbsenceCalendarDay[]
+  calendrier: Record<string, RhAbsenceCalendarDay>
+  stats: {
+    pending: number
+    justified: number
+    total: number
+  }
+  summary: {
+    pending: number
+    justified: number
+    absences: number
+    days_with_absences: number
+    days_pending: number
+    days_justified: number
+    days_mixed: number
+  }
+}
+
+export const rhAbsenceApi = {
+  getDay: (day: string) =>
+    get<RhAbsenceDayResponse>(`/rh/absences/jour?date=${encodeURIComponent(day)}`),
+
+  getCalendar: (month: string) =>
+    get<RhAbsenceCalendarResponse>(`/rh/absences/calendrier?month=${encodeURIComponent(month)}`),
+
+  setJustification: (
+    absence_id: number,
+    payload: {
+      admin_id?: number
+      justifiee: boolean
+      motif?: string
+      commentaire_rh?: string
+    }
+  ) =>
+    request<ApiResponse<{ absence?: RhAbsenceItem | null; jour?: RhAbsenceDayResponse }>>(
+      `/rh/absences/${absence_id}/justification`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }
+    ),
 }
 
 

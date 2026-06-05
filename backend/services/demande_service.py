@@ -19,7 +19,8 @@ class DemandeService:
                 "SELECT COUNT(*) as c FROM dbo.{table} "
                 "WHERE LOWER(ISNULL(statut,'')) LIKE '%demande%' "
                 "OR LOWER(ISNULL(statut,'')) LIKE '%attente%' "
-                "OR LOWER(ISNULL(statut,'')) LIKE '%pending%'"
+                "OR LOWER(ISNULL(statut,'')) LIKE '%pending%' "
+                "OR LOWER(ISNULL(statut,'')) LIKE '%progress%'"
             )
 
             q_conge = q_template.format(table="Conge")
@@ -66,7 +67,7 @@ class DemandeService:
                 )
                 q_pend = (
                     "SELECT COUNT(*) as c FROM dbo." + t +
-                    " WHERE employe_id = ? AND (LOWER(ISNULL(statut,'')) LIKE '%demande%' OR LOWER(ISNULL(statut,'')) LIKE '%attente%' OR LOWER(ISNULL(statut,'')) LIKE '%pending%')"
+                    " WHERE employe_id = ? AND (LOWER(ISNULL(statut,'')) LIKE '%demande%' OR LOWER(ISNULL(statut,'')) LIKE '%attente%' OR LOWER(ISNULL(statut,'')) LIKE '%pending%' OR LOWER(ISNULL(statut,'')) LIKE '%progress%')"
                 )
 
                 row_a = self.db.fetch_one(q_acc, [employe_id])

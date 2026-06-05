@@ -50,8 +50,34 @@ import {
   type PointageRow,
 } from "@/lib/api"
 
+function getPointageStatus(row: PointageRow | null | undefined) {
+  if (!row) return "Absent"
+
+  const sousStatut = (row.sous_statut || "").toLowerCase().trim()
+  const statut = (row.statut || "").toLowerCase().trim()
+
+  if (sousStatut === "retard" || statut === "retard" || statut === "en retard") {
+    return "Retard"
+  }
+
+  if (sousStatut === "a_l_heure" || statut === "present" || statut === "présent" || statut === "a l heure" || statut === "a l'heure") {
+    return "Present"
+  }
+
+  if (row.retard_minutes && row.retard_minutes > 0) {
+    return "Retard"
+  }
+
+  if (row.heure_entree) {
+    return "Present"
+  }
+
+  return "Absent"
+}
+
 function isPresentDay(row: PointageRow) {
-  return row.statut === "Present" || (row.retard_minutes || 0) > 0 || !!row.heure_entree
+  const status = getPointageStatus(row)
+  return status === "Present" || status === "Retard"
 }
 
 const WEEK_LABELS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
@@ -229,7 +255,7 @@ export default function EmployeeDashboardModern() {
 
     const hours = weekRows.reduce((sum: number, row: PointageRow) => sum + (row.duree_travail || 0), 0)
     const presentDays = weekRows.filter((row: PointageRow) => isPresentDay(row)).length
-    const retardDays = weekRows.filter((row: PointageRow) => (row.retard_minutes || 0) > 0).length
+    const retardDays = weekRows.filter((row: PointageRow) => getPointageStatus(row) === "Retard").length
     const presenceRate = Math.min(100, Math.round((presentDays / 5) * 100))
 
     const byDate = new Map(weekRows.map((row: PointageRow) => [row.date_pointage, row]))
@@ -241,7 +267,7 @@ export default function EmployeeDashboardModern() {
       return {
         jour: WEEK_LABELS[index],
         presence: row && isPresentDay(row) ? 1 : 0,
-        retard: row && (row.retard_minutes || 0) > 0 ? 1 : 0,
+        retard: row && getPointageStatus(row) === "Retard" ? 1 : 0,
       }
     })
 

@@ -1,5 +1,5 @@
-import useSWR from "swr"
-import { swrFetcher } from "@/lib/api"
+import { useQuery } from "@tanstack/react-query"
+import { statsApi } from "@/lib/api"
 
 export function useStatsBI(filters: any) {
   // Remap filters to match the new endpoints
@@ -19,16 +19,25 @@ export function useStatsBI(filters: any) {
     if (filters.date_fin) params.date_fin = filters.date_fin
   }
 
-  // Construct query string for SWR key
-  const query = new URLSearchParams(params).toString()
-  const key = query ? `/stats/admin/dashboard-data?${query}` : null
+  const queryKey = ["statsBI", params]
 
-  const { data, error, isLoading, mutate } = useSWR(key, swrFetcher)
+  const query = useQuery({
+    queryKey,
+    queryFn: async () => {
+      // statsApi.dashboardBi returns { ok: true, ...data }
+      const res = await statsApi.dashboardBi(params)
+      // Since res already throws an error if !ok in lib/api.ts, we can just return res
+      return res
+    },
+    // Keep it enabled only if we have necessary filter conditions, but usually we always do.
+  })
 
   return { 
-    data, 
-    loading: isLoading,
-    error,
-    mutate
+    data: query.data, 
+    loading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error,
+    refetch: query.refetch,
+    mutate: query.refetch, // alias for backwards compatibility
   }
 }

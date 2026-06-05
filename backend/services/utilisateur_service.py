@@ -1,6 +1,6 @@
 # backend/services/utilisateur_service.py
 
-from typing import Dict, List
+from typing import Dict, List, Optional, Any
 from backend.repositories.utilisateur_repo import UtilisateurRepository
 from backend.utils.security import hash_password, verify_password
 
@@ -54,3 +54,16 @@ class UtilisateurService:
             return {"ok": False, "error": "Utilisateur introuvable."}
         self.repo.delete(user_id)
         return {"ok": True, "message": "Utilisateur supprimé."}
+
+    def get_status_by_employe_id(self, employe_id: int) -> Dict:
+        status = self.repo.get_status_by_employe_id(employe_id)
+        if not status:
+            return {"ok": False, "error": "Compte utilisateur introuvable pour cet employé."}
+        
+        # S'assurer que les valeurs sont formatées proprement
+        return {
+            "ok": True,
+            "user_id": status["user_id"],
+            "password_exists": bool(status["password_exists"]),
+            "password_updated_at": status["password_updated_at"]
+        }

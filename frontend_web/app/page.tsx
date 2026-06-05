@@ -94,13 +94,13 @@ export default function LoginPage() {
             <path d="M100,0 L100,800 L0,800 C30,700 10,600 40,500 C70,400 20,300 50,200 C80,100 30,50 60,0 Z" />
           </svg>
         </div>
-        
+
         {/* Content */}
         <div className="z-10 flex flex-col items-center gap-6 px-12 text-center">
           <p className="text-2xl font-light text-white/90">Bienvenue sur</p>
-          
+
           <Image
-            src="/images/inet-logo.png"   
+            src="/images/inet-logo.png"
             alt="Inet"
             width={200}
             height={100}
@@ -108,8 +108,8 @@ export default function LoginPage() {
             style={{ width: "200 ", height: "100" }}
             priority
           />
-          
-          <h1 className="text-4xl font-bold text-white">RH Intelligente</h1>
+
+          <p className="text-2xl font-light text-white/90">Platforme de Gestion des Ressources Humaines</p>
         </div>
 
       </div>
@@ -126,7 +126,7 @@ export default function LoginPage() {
             style={{ width: "auto", height: "auto" }}
             priority
           />
-          <h1 className="text-2xl font-bold text-gray-900">RH Intelligente</h1>
+          <p className="text-2xl font-bold text-gray-900">Platforme de Gestion des Ressources Humaines</p>
         </div>
 
         <div className="w-full max-w-md">
@@ -178,9 +178,9 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button 
-              type="submit" 
-              className="h-12 w-full bg-[#0066CC] text-base font-semibold hover:bg-[#0055AA]" 
+            <Button
+              type="submit"
+              className="h-12 w-full bg-[#0066CC] text-base font-semibold hover:bg-[#0055AA]"
               disabled={loading}
             >
               {loading ? (

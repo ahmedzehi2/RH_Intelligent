@@ -1,95 +1,9 @@
 # backend/repositories/pointage_repo.py
 
 from typing import Optional, Dict
-from datetime import datetime, time
+from datetime import datetime
 from backend.db import Database
-
-
-# ─────────────────────────────────────────────
-#  HELPERS DE CALCUL
-# ─────────────────────────────────────────────
-
-HEURE_REFERENCE = time(8, 0, 0)   # 08:00 = heure de début officielle
-TOLERANCE_RETARD = 10              # minutes de tolérance avant "En retard"
-
-
-def _parse_time(t: Optional[str]) -> Optional[time]:
-    """Convertit '08:05', '08:05:46' ou None → time ou None."""
-    if not t:
-        return None
-    try:
-        for fmt in ("%H:%M:%S", "%H:%M"):
-            try:
-                return datetime.strptime(t, fmt).time()
-            except ValueError:
-                continue
-    except Exception:
-        return None
-
-
-def _diff_minutes(t1: Optional[time], t2: Optional[time]) -> Optional[int]:
-    """Retourne t2 - t1 en minutes, ou None si l'un est absent."""
-    if t1 is None or t2 is None:
-        return None
-    dt1 = datetime.combine(datetime.today(), t1)
-    dt2 = datetime.combine(datetime.today(), t2)
-    diff = (dt2 - dt1).total_seconds() / 60
-    return int(diff) if diff >= 0 else None
-
-
-def _calcul_retard(heure_entree: Optional[str]) -> int:
-    """Calcule le retard en minutes par rapport à 08:00."""
-    he = _parse_time(heure_entree)
-    if he is None:
-        return 0
-    ref = HEURE_REFERENCE
-    dt_he  = datetime.combine(datetime.today(), he)
-    dt_ref = datetime.combine(datetime.today(), ref)
-    diff = int((dt_he - dt_ref).total_seconds() / 60)
-    return max(diff, 0)
-
-
-def _calcul_statut(retard_minutes: int, heure_sortie: Optional[str]) -> str:
-    """Détermine le statut selon le retard."""
-    if retard_minutes > TOLERANCE_RETARD:
-        return "En retard"
-    return "Present"
-
-
-def _calcul_champs(data: Dict) -> Dict:
-    """
-    Reçoit le dict brut (admin_add ou admin_edit) et retourne
-    une copie enrichie avec duree_pause, duree_travail,
-    retard_minutes et statut calculés automatiquement.
-    """
-    d = dict(data)
-
-    he  = d.get("heure_entree")
-    hs  = d.get("heure_sortie")
-    hep = d.get("heure_entree_pause")
-    hsp = d.get("heure_sortie_pause")
-
-    # ── Durée de pause (minutes) ───────────────────────────────
-    duree_pause = _diff_minutes(_parse_time(hep), _parse_time(hsp))
-    d["duree_pause"] = duree_pause
-    d["is_pause_complete"] = 1 if (hep and hsp) else 0
-
-    # ── Durée de travail (heures décimales) ───────────────────
-    total_minutes = _diff_minutes(_parse_time(he), _parse_time(hs))
-    if total_minutes is not None:
-        pause = duree_pause or 0
-        d["duree_travail"] = round((total_minutes - pause) / 60.0, 2)
-    else:
-        d["duree_travail"] = None
-
-    # ── Retard (minutes) ──────────────────────────────────────
-    retard = _calcul_retard(he)
-    d["retard_minutes"] = retard
-
-    # ── Statut ────────────────────────────────────────────────
-    d["statut"] = _calcul_statut(retard, hs)
-
-    return d
+from backend.services.pointage_helpers import compute_pointage_fields, compute_retard_minutes, compute_sous_statut
 
 
 # ─────────────────────────────────────────────
@@ -100,6 +14,24 @@ class PointageRepository:
     def __init__(self):
         self.db = Database()
 
+    def _enrich(self, row):
+        if not row: return row
+        row = dict(row)
+        def format_min(m):
+            if m is None: return None
+            try:
+                m_int = int(float(m))
+            except (ValueError, TypeError):
+                return None
+            return f"{m_int // 60}h {str(m_int % 60).zfill(2)}min"
+        
+        row["duree_travail_formattee"] = format_min(row.get("duree_travail"))
+        row["duree_pause_formattee"] = format_min(row.get("duree_pause"))
+        return row
+
+    def _enrich_many(self, rows):
+        return [self._enrich(r) for r in rows]
+
     # ----------------------------------------------------
     # GET TODAY POINTAGE
     # ----------------------------------------------------
@@ -109,7 +41,7 @@ class PointageRepository:
         FROM dbo.Pointage
         WHERE employe_id = ? AND date_pointage = CAST(? AS DATE)
         """
-        return self.db.fetch_one(sql, [emp, d])
+        return self._enrich(self.db.fetch_one(sql, [emp, d]))
 
     # ----------------------------------------------------
     # INSERT ENTREE
@@ -127,7 +59,8 @@ class PointageRepository:
             is_pause_complete,
             duree_travail,
             retard_minutes,
-            statut
+            statut,
+            sous_statut
         )
         OUTPUT INSERTED.pointage_id
         VALUES (
@@ -140,11 +73,12 @@ class PointageRepository:
             NULL,
             0,
             NULL,
-            CASE WHEN DATEDIFF(MINUTE,'08:00',CAST(? AS TIME)) > 0
-                 THEN DATEDIFF(MINUTE,'08:00',CAST(? AS TIME))
+            CASE WHEN DATEDIFF(MINUTE,'08:15',CAST(? AS TIME)) > 0
+                 THEN DATEDIFF(MINUTE,'08:15',CAST(? AS TIME))
                  ELSE 0 END,
-            CASE WHEN DATEDIFF(MINUTE,'08:00',CAST(? AS TIME)) > 10
-                 THEN 'En retard' ELSE 'Present' END
+            'PRESENT',
+            CASE WHEN DATEDIFF(MINUTE,'08:15',CAST(? AS TIME)) > 0
+                 THEN 'RETARD' ELSE 'A_L_HEURE' END
         )
         """
         return self.db.execute_and_identity(sql, [
@@ -153,7 +87,7 @@ class PointageRepository:
             h,
             h,   # 1er DATEDIFF (condition)
             h,   # 2ème DATEDIFF (valeur)
-            h,   # 3ème DATEDIFF (statut)
+            h,   # 3ème DATEDIFF (sous_statut)
         ])
 
     # ----------------------------------------------------
@@ -190,9 +124,14 @@ class PointageRepository:
         SET
             heure_sortie = CAST(? AS TIME),
             duree_travail =
-                (DATEDIFF(MINUTE, heure_entree, CAST(? AS TIME)) / 60.0)
-                - (COALESCE(duree_pause, 0) / 60.0),
-            statut = 'Present'
+                DATEDIFF(MINUTE, heure_entree, CAST(? AS TIME))
+                - COALESCE(duree_pause, 0),
+            retard_minutes = CASE WHEN DATEDIFF(MINUTE,'08:15',heure_entree) > 0
+                                   THEN DATEDIFF(MINUTE,'08:15',heure_entree)
+                                   ELSE 0 END,
+            statut = 'PRESENT',
+            sous_statut = CASE WHEN DATEDIFF(MINUTE,'08:15',heure_entree) > 0
+                                THEN 'RETARD' ELSE 'A_L_HEURE' END
         WHERE pointage_id = ?
         """
         return self.db.execute(sql, [h, h, pid])
@@ -213,7 +152,7 @@ class PointageRepository:
               AND date_pointage <  DATEADD(MONTH, 1, CAST(? AS DATE))
             ORDER BY date_pointage DESC, pointage_id DESC
             """
-            return self.db.fetch_all(sql, [emp, _debut, _debut])
+            return self._enrich_many(self.db.fetch_all(sql, [emp, _debut, _debut]))
 
         # Cas 2 : filtre par plage explicite
         if date_debut and date_fin:
@@ -225,7 +164,7 @@ class PointageRepository:
               AND date_pointage <= CAST(? AS DATE)
             ORDER BY date_pointage ASC, pointage_id ASC
             """
-            return self.db.fetch_all(sql, [emp, date_debut, date_fin])
+            return self._enrich_many(self.db.fetch_all(sql, [emp, date_debut, date_fin]))
 
         # Cas 3 : fallback N derniers
         sql = f"""
@@ -234,7 +173,7 @@ class PointageRepository:
         WHERE employe_id = ?
         ORDER BY date_pointage DESC, pointage_id DESC
         """
-        return self.db.fetch_all(sql, [emp])
+        return self._enrich_many(self.db.fetch_all(sql, [emp]))
 
     # ----------------------------------------------------
     # ADMIN GET ALL
@@ -248,16 +187,27 @@ class PointageRepository:
           AND p.date_pointage <= CAST(? AS DATE)
         ORDER BY e.nom, e.prenom, p.date_pointage
         """
-        return self.db.fetch_all(sql, [date_debut, date_fin])
+        return self._enrich_many(self.db.fetch_all(sql, [date_debut, date_fin]))
 
     def get_conges_periode(self, date_debut: str, date_fin: str):
         """Retourne tous les congés validés qui chevauchent la période."""
         sql = """
-        SELECT c.employe_id, c.date_debut, c.date_fin, c.type_conge, c.statut
+        SELECT c.employe_id, c.conge_id, c.date_debut, c.date_fin, c.type_conge, c.statut
         FROM dbo.Conge c
         WHERE c.statut IN ('Valide', 'Demande')
           AND c.date_debut <= CAST(? AS DATE)
           AND c.date_fin   >= CAST(? AS DATE)
+        """
+        return self.db.fetch_all(sql, [date_fin, date_debut])
+
+    def get_missions_periode(self, date_debut: str, date_fin: str):
+        """Retourne toutes les missions validées qui chevauchent la période."""
+        sql = """
+        SELECT m.employe_id, m.mission_id, m.date_debut, m.date_fin, m.type_mission, m.lieu_mission, m.statut
+        FROM dbo.Mission m
+        WHERE m.statut = 'Valide'
+          AND m.date_debut <= CAST(? AS DATE)
+          AND m.date_fin   >= CAST(? AS DATE)
         """
         return self.db.fetch_all(sql, [date_fin, date_debut])
 
@@ -302,7 +252,7 @@ class PointageRepository:
 
         base_sql += " ORDER BY p.date_pointage DESC, p.pointage_id DESC"
         
-        return self.db.fetch_all(base_sql, params)
+        return self._enrich_many(self.db.fetch_all(base_sql, params))
 
     def get_monthly_work_stats(self, date_debut: str):
         sql = """
@@ -317,7 +267,12 @@ class PointageRepository:
                     WHEN TRY_CONVERT(FLOAT, p.duree_travail) IS NOT NULL
                     THEN 1
                     ELSE 0
-                END) AS jours_travailles
+                END) AS jours_travailles,
+            SUM(CASE 
+                    WHEN p.sous_statut = 'RETARD' OR COALESCE(p.retard_minutes, 0) > 0 
+                    THEN 1 
+                    ELSE 0 
+                END) AS jours_retard
         FROM dbo.Pointage p
         WHERE p.date_pointage >= CAST(? AS DATE)
           AND p.date_pointage < DATEADD(MONTH, 1, CAST(? AS DATE))
@@ -328,8 +283,8 @@ class PointageRepository:
     def get_monthly_presence_stats(self, date_debut: str):
         sql = """
         SELECT
-            COUNT(CASE WHEN p.statut = 'Present' THEN 1 END) AS jours_present,
-            COUNT(CASE WHEN COALESCE(p.retard_minutes, 0) > 0 THEN 1 END) AS jours_retard
+            COUNT(CASE WHEN p.statut = 'PRESENT' THEN 1 END) AS jours_present,
+            COUNT(CASE WHEN p.sous_statut = 'RETARD' OR COALESCE(p.retard_minutes, 0) > 0 THEN 1 END) AS jours_retard
         FROM dbo.Pointage p
         WHERE p.date_pointage >= CAST(? AS DATE)
           AND p.date_pointage < DATEADD(MONTH, 1, CAST(? AS DATE))
@@ -340,7 +295,7 @@ class PointageRepository:
     # ADMIN ADD  ← calculs automatiques
     # ----------------------------------------------------
     def admin_add(self, data: Dict) -> int:
-        d = _calcul_champs(data)   # ← calcule tout
+        d = compute_pointage_fields(data)   # ← calcule tout
 
         he  = d.get("heure_entree")
         hs  = d.get("heure_sortie")
@@ -353,7 +308,8 @@ class PointageRepository:
             heure_entree, heure_sortie,
             heure_entree_pause, heure_sortie_pause,
             duree_pause, is_pause_complete,
-            duree_travail, retard_minutes, statut
+            duree_travail, retard_minutes, statut, sous_statut,
+            demande_conge_id, demande_mission_id, demande_formation_id
         )
         OUTPUT INSERTED.pointage_id
         VALUES (
@@ -363,7 +319,8 @@ class PointageRepository:
             CASE WHEN ? IS NOT NULL THEN CAST(? AS TIME) ELSE NULL END,
             CASE WHEN ? IS NOT NULL THEN CAST(? AS TIME) ELSE NULL END,
             CASE WHEN ? IS NOT NULL THEN CAST(? AS TIME) ELSE NULL END,
-            ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?
         )
         """
         return self.db.execute_and_identity(sql, [
@@ -378,13 +335,14 @@ class PointageRepository:
             d.get("duree_travail"),
             d.get("retard_minutes"),
             d.get("statut"),
+            d.get("sous_statut"),
+            d.get("demande_conge_id"),
+            d.get("demande_mission_id"),
+            d.get("demande_formation_id"),
         ])
 
-    # ----------------------------------------------------
-    # ADMIN UPDATE  ← calculs automatiques
-    # ----------------------------------------------------
     def admin_update(self, data: Dict):
-        d = _calcul_champs(data)   # ← calcule tout
+        d = compute_pointage_fields(data)   # ← calcule tout
 
         he  = d.get("heure_entree")
         hs  = d.get("heure_sortie")
@@ -403,7 +361,11 @@ class PointageRepository:
             is_pause_complete  = ?,
             duree_travail      = ?,
             retard_minutes     = ?,
-            statut             = ?
+            statut             = ?,
+            sous_statut        = ?,
+            demande_conge_id   = ?,
+            demande_mission_id = ?,
+            demande_formation_id = ?
         WHERE pointage_id = ?
         """
         return self.db.execute(sql, [
@@ -417,12 +379,23 @@ class PointageRepository:
             d.get("duree_travail"),
             d.get("retard_minutes"),
             d.get("statut"),
+            d.get("sous_statut"),
+            d.get("demande_conge_id"),
+            d.get("demande_mission_id"),
+            d.get("demande_formation_id"),
             d["pointage_id"],
         ])
 
-    # ----------------------------------------------------
-    # ADMIN DELETE
-    # ----------------------------------------------------
     def admin_delete(self, pid: int):
         sql = "DELETE FROM dbo.Pointage WHERE pointage_id = ?"
         return self.db.execute(sql, [pid])
+
+    def delete_by_relation(self, relation_type: str, relation_id: int):
+        column = ""
+        if relation_type == "conge": column = "demande_conge_id"
+        elif relation_type == "mission": column = "demande_mission_id"
+        elif relation_type == "formation": column = "demande_formation_id"
+        
+        if not column: return 0
+        sql = f"DELETE FROM dbo.Pointage WHERE {column} = ?"
+        return self.db.execute(sql, [relation_id])

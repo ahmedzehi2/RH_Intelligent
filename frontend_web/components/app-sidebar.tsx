@@ -31,13 +31,13 @@ const personalNav = [
 ]
 
 const adminNav = [
-  { title: "Tableau de bord", href: "/admin/dashboard", icon: LayoutDashboard },
+  { title: "Accueil", href: "/admin/dashboard", icon: LayoutDashboard },
   { title: "Gestion Employés", href: "/admin/employes", icon: Users },
   { title: "Gestion Pointage", href: "/admin/pointage", icon: Clock },
   { title: "Validations", href: "/admin/validations", icon: CheckSquare },
-  { title: "Absences", href: "/admin/absences", icon: UserX },
+  { title: "Gestion des Absences", href: "/admin/absences", icon: UserX },
   { title: "Gestion Formations", href: "/admin/formations", icon: GraduationCap },
-  { title: "Statistiques", href: "/admin/stats", icon: BarChart3 },
+  { title: "Tableau de bord", href: "/admin/stats", icon: BarChart3 },
   { title: "Alertes IA", href: "/admin/alertes", icon: Brain },
 ]
 
@@ -62,7 +62,7 @@ export function AppSidebar({
       className={cn(
         "fixed top-0 left-0 z-40 flex flex-col h-screen bg-[#0f172a] border-r border-slate-800",
         "transition-all duration-300 ease-in-out",
-        collapsed ? "w-[70px]" : "w-[240px]"
+        collapsed ? "w-[70px]" : "w-[280px]"
       )}
     >
       {/* ── Toggle button ── */}
@@ -112,7 +112,7 @@ export function AppSidebar({
       </div>
 
       {/* ── Navigation ── */}
-      <div className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
+      <div className="flex-1 overflow-y-auto py-3 px-2 space-y-4 no-scrollbar">
         {/* Espace Personnel */}
         <NavGroup
           label="Mon Espace"

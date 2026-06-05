@@ -13,6 +13,8 @@ export type UserProfile = {
   nom?: string
   prenom?: string
   email?: string
+  matricule?: string
+  nom_departement?: string
 }
 
 type AuthContextType = {

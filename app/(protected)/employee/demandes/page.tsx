@@ -95,7 +95,7 @@ export default function DemandesPage() {
   const [docLoading, setDocLoading] = useState(false)
 
   // Mission form
-  const [lieu, setLieu] = useState("")
+  const [lieu_mission, setLieuMission] = useState("")
   const [mDebut, setMDebut] = useState("")
   const [mFin, setMFin] = useState("")
   const [typeMission, setTypeMission] = useState("")
@@ -140,10 +140,10 @@ export default function DemandesPage() {
     if (!employeId) { toast.info("Connectez le backend FastAPI"); return }
     setMissionLoading(true)
     try {
-      const res = await missionApi.demander(employeId, lieu, mDebut, mFin, typeMission)
+      const res = await missionApi.demander(employeId, lieu_mission, mDebut, mFin, typeMission)
       if (res.ok) {
         toast.success("Mission declaree avec succes")
-        setLieu(""); setMDebut(""); setMFin(""); setTypeMission("")
+        setLieuMission(""); setMDebut(""); setMFin(""); setTypeMission("")
         await mutMissions()
       } else {
         toast.warning(res.error || "Erreur")
@@ -330,8 +330,8 @@ export default function DemandesPage() {
                 <CardContent>
                   <form onSubmit={demanderMission} className="space-y-4">
                     <div className="space-y-2">
-                      <Label>Lieu</Label>
-                      <Input placeholder="Ex: Tunis" value={lieu} onChange={(e) => setLieu(e.target.value)} required />
+                      <Label>Lieu de mission</Label>
+                      <Input placeholder="Ex: Tunis" value={lieu_mission} onChange={(e) => setLieuMission(e.target.value)} required />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -365,7 +365,7 @@ export default function DemandesPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Lieu</TableHead>
+                          <TableHead>Lieu de mission</TableHead>
                           <TableHead>Type</TableHead>
                           <TableHead>Debut</TableHead>
                           <TableHead>Fin</TableHead>
@@ -375,7 +375,7 @@ export default function DemandesPage() {
                       <TableBody>
                         {missions.map((m) => (
                           <TableRow key={m.mission_id}>
-                            <TableCell className="font-medium">{m.lieu}</TableCell>
+                            <TableCell className="font-medium">{m.lieu_mission}</TableCell>
                             <TableCell>{m.type_mission}</TableCell>
                             <TableCell>{m.date_debut}</TableCell>
                             <TableCell>{m.date_fin}</TableCell>

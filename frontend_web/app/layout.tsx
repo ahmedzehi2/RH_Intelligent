@@ -2,13 +2,17 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import { Toaster } from 'sonner'
 import { AuthProvider } from '@/context/auth-context'
+import { ThemeProvider } from '@/context/theme-context'
+import { LanguageProvider } from '@/context/language-context'
+import QueryProvider from '@/components/providers/query-provider'
 import './globals.css'
+import 'leaflet/dist/leaflet.css'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
-  title: 'Unilog - RH Intelligente',
-  description: 'Unilog - Application RH intelligente pour la gestion des employes, pointage, conges, missions et analyse predictive.',
+  title: 'iNET - RH Intelligente',
+  description: 'Inet - Application RH intelligente pour la gestion des employes, pointage, conges, missions et analyse predictive.',
 }
 
 export const viewport: Viewport = {
@@ -25,9 +29,15 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body className={`${inter.variable} font-sans antialiased`}>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <ThemeProvider>
+          <LanguageProvider>
+            <QueryProvider>
+              <AuthProvider>
+                {children}
+              </AuthProvider>
+            </QueryProvider>
+          </LanguageProvider>
+        </ThemeProvider>
         <Toaster richColors position="top-right" />
       </body>
     </html>

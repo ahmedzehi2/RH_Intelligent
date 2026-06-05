@@ -1,0 +1,24 @@
+{
+  "total_formations": 15,
+  "types_count": 10,
+  "organisateurs_count": 3,
+  "total_places": 30,
+  "formations_par_type": {
+    "Technique": 2,
+    "soft skilss": 1,
+    "Compliance": 1,
+    "Soft Skills": 1,
+    "Assistance": 1,
+    "ERP": 1,
+    "Dev": 2,
+    "AI": 2,
+    "BI": 2,
+    "Interne": 2
+  },
+  "formations_par_organisateur": {
+    "inet Academy": 3,
+    "inet": 1,
+    "Unilog Academy": 11
+  },
+  "date_export": "2026-06-01T12:44:38.669676"
+}

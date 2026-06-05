@@ -9,7 +9,7 @@ service = CongeService()
 
 
 # ============================
-# MODELES D’ENTRÉE
+# MODELES D'ENTRÉE
 # ============================
 
 class DemandeCongeRequest(BaseModel):
@@ -81,3 +81,16 @@ def conges_par_employe(employe_id: int):
     Liste des congés d'un employé.
     """
     return service.list_by_employe(employe_id)
+
+
+# ============================
+# GET /conge/all  (admin)
+# ============================
+
+@router.get("/all")
+def get_all_conges():
+    """
+    Liste de tous les congés (tous employés) avec nom/prénom/matricule.
+    Utilisé par le calendrier de pointage et le dashboard admin.
+    """
+    return service.list_all()

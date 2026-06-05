@@ -15,3 +15,4 @@ class Employe:
     statut: Optional[str]
     sexe: Optional[str]
     departement_id: int
+    solde_conge: float = 0.0

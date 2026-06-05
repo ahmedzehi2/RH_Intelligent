@@ -6,6 +6,14 @@ class CongeRepository:
     def __init__(self):
         self.db = Database()
 
+    def get_by_id(self, conge_id: int) -> Dict:
+        sql = """
+        SELECT *
+        FROM dbo.Conge
+        WHERE conge_id = ?
+        """
+        return self.db.fetch_one(sql, [conge_id])
+
     def get_by_employe(self, employe_id: int) -> List[Dict]:
         sql = """
         SELECT *
@@ -29,3 +37,12 @@ class CongeRepository:
     def refuser(self, conge_id: int, valide_par: int):
         sql = "UPDATE dbo.Conge SET statut='Refuse', valide_par=? WHERE conge_id=?"
         return self.db.execute(sql, [valide_par, conge_id])
+
+    def get_all(self) -> List[Dict]:
+        sql = """
+        SELECT c.*, e.nom, e.prenom, e.matricule
+        FROM dbo.Conge c
+        JOIN dbo.Employe e ON c.employe_id = e.employe_id
+        ORDER BY c.date_debut DESC;
+        """
+        return self.db.fetch_all(sql)

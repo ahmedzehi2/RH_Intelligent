@@ -3,12 +3,14 @@ from typing import Dict, Optional
 
 from backend.repositories.employe_repo import EmployeRepository
 from backend.repositories.formation_repo import FormationRepository
+from backend.services.attendance_sync_service import AttendanceSyncService
 
 
 class FormationService:
     def __init__(self):
         self.repo = FormationRepository()
         self.emp_repo = EmployeRepository()
+        self.sync_service = AttendanceSyncService()
 
     def _parse_date(self, value: str | None) -> Optional[datetime]:
         if not value:
@@ -32,6 +34,9 @@ class FormationService:
             "organisateur": (data.get("organisateur") or "").strip() or None,
             "type_formation": (data.get("type_formation") or "").strip() or None,
             "lieu": (data.get("lieu") or "").strip() or None,
+            "heure_debut": data.get("heure_debut"),
+            "heure_fin": data.get("heure_fin"),
+            "programme_details": data.get("programme_details"),
         }
 
     def _validate_payload(self, data: Dict, formation_id: int | None = None) -> Dict:
@@ -69,6 +74,39 @@ class FormationService:
         if duplicate:
             return {"ok": False, "error": "Une formation avec ce titre et cette date existe déjà."}
 
+        # Validation horaires
+        if payload.get("heure_debut") and payload.get("heure_fin"):
+            if payload["heure_fin"] <= payload["heure_debut"]:
+                return {"ok": False, "error": "L'heure de fin doit être après l'heure de début."}
+
+        # Validation dates (déjà fait implicitement en haut avec if not start or not end or end < start mais ajout par sécurité pour correspondre aux specs exactes)
+        if payload.get("date_debut") and payload.get("date_fin"):
+            if payload["date_fin"] < payload["date_debut"]:
+                return {"ok": False, "error": "La date de fin doit être après la date de début."}
+
+        # Validation programme_details
+        programme = payload.get("programme_details")
+        if programme:
+            if len(programme) == 0:
+                return {"ok": False, "error": "Le programme doit contenir au moins un jour."}
+
+            date_debut = payload.get("date_debut", "")
+            date_fin   = payload.get("date_fin",   "")
+
+            for i, jour in enumerate(programme):
+                # Champs obligatoires
+                for champ in ("jour", "date", "titre"):
+                    if not jour.get(champ):
+                        return {"ok": False, "error": f"Jour {i+1} : champ '{champ}' manquant."}
+
+                # Validation horaires spécifiques au jour
+                if jour.get("heure_debut") and jour.get("heure_fin"):
+                    if jour["heure_fin"] <= jour["heure_debut"]:
+                        return {
+                            "ok": False,
+                            "error": f"Jour {i+1} : l'heure de fin ({jour['heure_fin']}) doit être après l'heure de début ({jour['heure_debut']})."
+                        }
+
         return {"ok": True, "payload": payload}
 
     def ajouter(self, data: Dict) -> Dict:
@@ -98,6 +136,9 @@ class FormationService:
                 }
 
         self.repo.update(formation_id, validated["payload"])
+        # Synchronisation Pointage
+        self.sync_service.sync_formation(formation_id)
+        
         return {"ok": True, "message": "Formation modifiée."}
 
     def supprimer(self, formation_id: int) -> Dict:
@@ -105,6 +146,9 @@ class FormationService:
         if not formation:
             return {"ok": False, "error": "Formation introuvable."}
 
+        # Nettoyage Pointage avant suppression
+        self.sync_service.sync_formation(formation_id)
+        
         self.repo.delete(formation_id)
         return {"ok": True, "message": "Formation supprimée."}
 
@@ -136,6 +180,10 @@ class FormationService:
             return {"ok": False, "error": "Cette formation est complète."}
 
         inscription_id = self.repo.create_inscription(employee_id, formation_id)
+        
+        # Synchronisation Pointage
+        self.sync_service.sync_formation(formation_id)
+        
         return {"ok": True, "message": "Inscription créée.", "inscription_id": inscription_id}
 
     def desinscrire(self, employee_id: int, formation_id: int) -> Dict:
@@ -143,6 +191,10 @@ class FormationService:
             return {"ok": False, "error": "Inscription introuvable."}
 
         self.repo.delete_inscription(employee_id, formation_id)
+        
+        # Synchronisation Pointage
+        self.sync_service.sync_formation(formation_id)
+        
         return {"ok": True, "message": "Inscription supprimée."}
 
     def participants(self, formation_id: int) -> Dict:

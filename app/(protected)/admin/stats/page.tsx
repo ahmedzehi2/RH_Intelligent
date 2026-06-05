@@ -25,6 +25,8 @@ import {
 } from "@/lib/api"
 
 // ──────────────────────── Types ────────────────────────
+type FilterType = "Jour" | "Mois" | "Année" | "Période";
+type DateRange = "7 derniers jours" | "30 derniers jours" | "3 derniers mois" | "6 derniers mois" | "Dernière année";
 type DeptStats = {
   dept: string
   totalEmployes: number
@@ -124,7 +126,9 @@ function buildCongeByType(conges: CongeRow[]) {
 export default function StatsPage() {
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [period, setPeriod] = useState("all")
+  const [type, setType] = useState<FilterType>("Mois")
+  const [period, setPeriod] = useState<string>("") // Used for date input
+  const [range, setRange] = useState<DateRange>("30 derniers jours")
 
   const [employes, setEmployes] = useState<EmployeRow[]>([])
   const [allPointages, setAllPointages] = useState<PointageRow[]>([])
@@ -163,18 +167,50 @@ export default function StatsPage() {
   useEffect(() => { fetchAll() }, [fetchAll])
 
   // Computed data
-  const filteredPointages = period === "all"
-    ? allPointages
-    : allPointages.filter((p) => {
-        const d = new Date(p.date_pointage)
-        const now = new Date()
-        if (period === "month") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-        if (period === "quarter") {
-          const q = Math.floor(now.getMonth() / 3)
-          return Math.floor(d.getMonth() / 3) === q && d.getFullYear() === now.getFullYear()
-        }
-        return true
-      })
+  const filteredPointages = allPointages.filter((p) => {
+    const d = new Date(p.date_pointage);
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date = now;
+
+    if (type === "Jour") {
+      if (!period) return true; // No specific day chosen, show all
+      const selectedDate = new Date(period); // Assuming period is in YYYY-MM-DD format
+      return d.toDateString() === selectedDate.toDateString();
+    } else if (type === "Mois") {
+      if (!period) return true; // No specific month chosen, show all
+      const selectedMonth = parseInt(period, 10) - 1; // Month is 0-indexed
+      return d.getMonth() === selectedMonth && d.getFullYear() === now.getFullYear();
+    } else if (type === "Année") {
+      if (!period) return true; // No specific year chosen, show all
+      const selectedYear = parseInt(period, 10);
+      return d.getFullYear() === selectedYear;
+    } else if (type === "Période") {
+      const today = new Date(); // Use a fresh date object for range calculations
+      switch (range) {
+        case "7 derniers jours":
+          startDate = new Date(today.setDate(today.getDate() - 7));
+          break;
+        case "30 derniers jours":
+          startDate = new Date(today.setDate(today.getDate() - 30));
+          break;
+        case "3 derniers mois":
+          startDate = new Date(today.setMonth(today.getMonth() - 3));
+          break;
+        case "6 derniers mois":
+          startDate = new Date(today.setMonth(today.getMonth() - 6));
+          break;
+        case "Dernière année":
+          startDate = new Date(today.setFullYear(today.getFullYear() - 1));
+          break;
+        default:
+          startDate = new Date(0); // Epoch, effectively "all"
+          break;
+      }
+      return d >= startDate && d <= endDate;
+    }
+    return true; // Default to all if no filter type is matched
+  });
 
   const totalPts = filteredPointages.length || 1
   const totalPresent = filteredPointages.filter((p) => p.statut === "Present" || p.heure_entree).length
@@ -323,14 +359,53 @@ export default function StatsPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Select value={period} onValueChange={setPeriod}>
-              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Toute la periode</SelectItem>
-                <SelectItem value="month">Ce mois</SelectItem>
-                <SelectItem value="quarter">Ce trimestre</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Groupe 1 : boutons pill */}
+            <div className="flex h-9 items-center rounded-full bg-gray-100 p-1 shadow-sm transition-all duration-200">
+              {(["Jour","Mois","Année","Période"] as FilterType[]).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setType(t)}
+                  className={`text-sm font-semibold px-5 py-1.5 rounded-full
+                              transition-all duration-200 ${
+                    type === t
+                      ? "bg-indigo-600 text-white shadow-md"
+                      : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {/* Groupe 2 : input date séparé */}
+            <div className="flex items-center rounded-xl bg-gray-50 px-4 shadow-sm border border-gray-200 h-9 text-gray-700">
+              {type === "Période" ? (
+                <select
+                  value={range}
+                  onChange={(e) => setRange(e.target.value as DateRange)}
+                  className="bg-transparent border-none text-sm font-semibold
+                             text-gray-700 focus:ring-0 cursor-pointer w-full outline-none"
+                >
+                  <option>7 derniers jours</option>
+                  <option>30 derniers jours</option>
+                  <option>3 derniers mois</option>
+                  <option>6 derniers mois</option>
+                  <option>Dernière année</option>
+                </select>
+              ) : (
+                <>
+                  <input
+                    type={type === "Année" ? "number" : "text"}
+                    value={period}
+                    onChange={(e) => setPeriod(e.target.value)}
+                    placeholder={type==="Année" ? "2026" : ""}
+                    className="bg-transparent border-none text-sm font-semibold
+                               text-gray-700 focus:ring-0 outline-none w-full"
+                  />
+                  <Calendar className="size-4 text-gray-400" />
+                </>
+              )}
+            </div>
             <Button variant="outline" size="icon" onClick={fetchAll} title="Rafraichir">
               <RefreshCw className="size-4" />
             </Button>
@@ -339,6 +414,7 @@ export default function StatsPage() {
               Telecharger PDF
             </Button>
           </div>
+
         </div>
 
         {/* Onglets pour les 3 sections */}

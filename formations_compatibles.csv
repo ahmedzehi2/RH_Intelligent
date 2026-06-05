@@ -1,0 +1,16 @@
+﻿ID,Titre,Type,Organisateur,Lieu,Date début,Date fin,Durée (h),Places,Statut
+24,Bases de données SQL avancé,Technique,inet Academy,iNET / salle 2,11/06/2026,13/06/2026,9,10,À venir
+23,Formation react,Technique,inet,inet,16/05/2026,18/05/2026,4,15,Terminée
+21,gestion stresse,soft skilss,inet Academy,inet,04/05/2026,04/05/2026,,5,Terminée
+12,RGPD sécurité interne,Compliance,inet Academy,,04/05/2026,04/05/2026,,,Terminée
+11,Qualité de service client,Soft Skills,Unilog Academy,,28/04/2026,28/04/2026,,,Terminée
+10,Helpdesk & Hotlines Unilog,Assistance,Unilog Academy,,27/04/2026,27/04/2026,,,Terminée
+9,ERP Interne – Finance,ERP,Unilog Academy,,20/04/2026,21/04/2026,,,Terminée
+8,Frontend React interne,Dev,Unilog Academy,,13/04/2026,14/04/2026,,,Terminée
+7,Clean Architecture .NET,Dev,Unilog Academy,,06/04/2026,08/04/2026,,,Terminée
+6,MLOps interne (CI/CD),AI,Unilog Academy,,30/03/2026,30/03/2026,,,Terminée
+5,Fundamentaux Machine Learning,AI,Unilog Academy,,23/03/2026,24/03/2026,,,Terminée
+4,ETL interne avec SSIS,BI,Unilog Academy,,16/03/2026,17/03/2026,,,Terminée
+3,Power BI interne,BI,Unilog Academy,,09/03/2026,11/03/2026,,,Terminée
+2,Culture & Valeurs Unilog,Interne,Unilog Academy,,03/03/2026,03/03/2026,,,Terminée
+1,Onboarding Unilog,Interne,Unilog Academy,,02/03/2026,02/03/2026,,,Terminée

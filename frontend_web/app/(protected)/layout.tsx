@@ -37,15 +37,15 @@ export default function ProtectedLayout({
   if (!isLogged) return null
 
   return (
-    <div className="min-h-screen bg-gray-50/50 flex flex-col">
+    <div className="h-screen bg-gray-50/50 flex overflow-hidden">
       {/* SIDEBAR LEFT - Fixed position */}
       <AppSidebar collapsed={collapsed} setCollapsed={setCollapsed} />
 
-      {/* MAIN CONTENT - Dynamic margin based on sidebar state */}
+      {/* MAIN CONTENT - Scrollable area with dynamic left padding for sidebar */}
       <main 
         className={cn(
-          "transition-all duration-300 min-h-screen flex flex-col min-w-0",
-          collapsed ? "pl-[70px]" : "pl-[240px]"
+          "flex-1 overflow-y-auto transition-all duration-300 min-w-0",
+          collapsed ? "ml-[70px]" : "ml-[280px]"
         )}
       >
         {children}

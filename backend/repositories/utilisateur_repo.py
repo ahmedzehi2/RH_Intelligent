@@ -1,6 +1,6 @@
 # backend/repositories/utilisateur_repo.py
 
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 from backend.db import Database
 
 
@@ -114,6 +114,20 @@ class UtilisateurRepository:
             u.employe_id, u.date_creation, u.date_modification
         FROM dbo.Utilisateur u
         WHERE u.employe_id = ?;
+        """
+        return self.db.fetch_one(sql, [employe_id])
+
+    # ----------------------------
+    # GET STATUS by employe_id
+    # ----------------------------
+    def get_status_by_employe_id(self, employe_id: int) -> Optional[Dict]:
+        sql = """
+        SELECT 
+            user_id,
+            CASE WHEN mot_de_passe IS NOT NULL AND mot_de_passe <> '' THEN 1 ELSE 0 END as password_exists,
+            date_modification as password_updated_at
+        FROM dbo.Utilisateur
+        WHERE employe_id = ?;
         """
         return self.db.fetch_one(sql, [employe_id])
 

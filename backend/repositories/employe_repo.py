@@ -1,5 +1,5 @@
 # backend/repositories/employe_repo.py
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from backend.db import Database
 
 class EmployeRepository:
@@ -9,7 +9,7 @@ class EmployeRepository:
     def get_all(self) -> List[Dict]:
         sql = """
         SELECT e.employe_id, e.matricule, e.nom, e.prenom, e.adresse_mail, e.email_personnel,
-               e.date_naissance, e.date_embauche, e.poste, e.type_contrat, e.statut, e.sexe,
+               e.date_naissance, e.date_embauche, e.poste, e.type_contrat, e.statut, e.sexe, e.solde_conge,
              d.departement_id, d.nom_departement, d.sous_departement,
              u.user_id, u.role
         FROM dbo.Employe e

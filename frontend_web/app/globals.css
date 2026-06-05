@@ -318,3 +318,12 @@
 [data-sonner-toast] {
   animation: slideInRight 0.3s ease-out;
 }
+
+/* utility to hide scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

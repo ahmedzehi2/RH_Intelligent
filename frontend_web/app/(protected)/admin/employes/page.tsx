@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Users, Search, Mail, Building2, Briefcase, Plus, Pencil, Trash2, X, Loader2, Clock } from "lucide-react"
+import { Users, Search, Mail, Building2, Briefcase, Plus, Pencil, Trash2, X, Loader2, Clock, Send, Eye, EyeOff, Lock } from "lucide-react"
 import useSWR, { mutate as globalMutate } from "swr"
 import { toast } from "sonner"
 import { AppHeader } from "@/components/app-header"
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -88,6 +89,20 @@ export default function AdminEmployes() {
   const [form, setForm] = useState<EmployeForm>(emptyForm)
   const [saving, setSaving] = useState(false)
 
+  // Email states
+  const [isWelcomeEmailOpen, setIsWelcomeEmailOpen] = useState(false)
+  const [isCustomEmailOpen, setIsCustomEmailOpen] = useState(false)
+  const [emailForm, setEmailForm] = useState({
+    email: "",
+    subject: "Informations RH",
+    message: ""
+  })
+  const [lastGeneratedPassword, setLastGeneratedPassword] = useState<string | null>(null)
+
+  // Password visibility
+  const [showPassword, setShowPassword] = useState(false)
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+
   const { data: rows = [], isLoading, mutate } = useSWR("admin-employes", fetchEmployes)
   const { data: departements = [] } = useSWR("admin-departements", fetchDepartements)
 
@@ -108,6 +123,7 @@ export default function AdminEmployes() {
   // Handlers
   const handleOpenAdd = () => {
     setForm(emptyForm)
+    setShowPassword(false)
     setIsAddOpen(true)
   }
 
@@ -137,12 +153,26 @@ export default function AdminEmployes() {
       confirmPassword: "",
       role: normalizedRole,
     })
+    setShowPassword(false)
+    setIsChangingPassword(false)
     setIsEditOpen(true)
   }
 
   const handleOpenDelete = (emp: EmployeRow) => {
     setSelectedEmploye(emp)
     setIsDeleteOpen(true)
+  }
+
+  const handleOpenCustomEmail = (emp: EmployeRow) => {
+    setSelectedEmploye(emp)
+    setEmailForm({
+      email: emp.adresse_mail || "",
+      subject: "Informations RH - iNET",
+      message: `Bonjour ${emp.prenom},
+
+`
+    })
+    setIsCustomEmailOpen(true)
   }
 
   const handleAdd = async () => {
@@ -185,6 +215,18 @@ export default function AdminEmployes() {
         setIsAddOpen(false)
         mutate()
         globalMutate(() => true) // Global refresh for all SWR data
+
+        // Stocker le mot de passe pour l'email de bienvenue
+        setLastGeneratedPassword(form.password)
+
+        // Préparer la modale d'email de bienvenue
+        setSelectedEmploye({
+          employe_id: res.employe_id,
+          nom: form.nom,
+          prenom: form.prenom,
+          adresse_mail: form.adresse_mail
+        } as any)
+        setIsWelcomeEmailOpen(true)
       } else {
         toast.error(res.error || "Erreur lors de l'ajout")
       }
@@ -194,6 +236,12 @@ export default function AdminEmployes() {
       setSaving(false)
     }
   }
+
+
+
+
+
+
 
   const handleEdit = async () => {
     if (!selectedEmploye) return
@@ -231,6 +279,7 @@ export default function AdminEmployes() {
         nom: form.nom || undefined,
         prenom: form.prenom || undefined,
         adresse_mail: form.adresse_mail || undefined,
+        email_personnel: form.email_personnel || undefined,
         date_naissance: form.date_naissance || undefined,
         date_embauche: form.date_embauche || undefined,
         poste: form.poste || undefined,
@@ -274,14 +323,13 @@ export default function AdminEmployes() {
       setSaving(false)
     }
   }
-
   const handleDelete = async () => {
     if (!selectedEmploye) return
     setSaving(true)
     try {
       const res = await employeApi.supprimer(selectedEmploye.employe_id)
       if (res.ok) {
-        toast.success("Employe supprime avec succes")
+        toast.success("Employé supprimé avec succès")
         setIsDeleteOpen(false)
         mutate()
         globalMutate(() => true)
@@ -289,11 +337,72 @@ export default function AdminEmployes() {
         toast.error(res.error || "Erreur lors de la suppression")
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur reseau")
+      toast.error(err instanceof Error ? err.message : "Erreur réseau")
     } finally {
       setSaving(false)
     }
   }
+
+  const handleSendWelcomeEmail = async () => {
+    if (!selectedEmploye) return
+    setSaving(true)
+    try {
+      const res = await employeApi.sendWelcomeEmail(
+        selectedEmploye.employe_id,
+        selectedEmploye.adresse_mail || undefined,
+        lastGeneratedPassword || undefined
+      )
+      if (res.ok) {
+        toast.success("Email de bienvenue envoyé")
+        setIsWelcomeEmailOpen(false)
+        setLastGeneratedPassword(null)
+      } else {
+        toast.error(res.error || "Erreur lors de l'envoi")
+      }
+    } catch (err) {
+      toast.error("Erreur réseau")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSendCustomEmail = async () => {
+    if (!selectedEmploye) return
+    if (!emailForm.subject || !emailForm.message) {
+      toast.warning("Veuillez remplir le sujet et le message")
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await employeApi.sendCustomEmail({
+        employe_id: selectedEmploye.employe_id,
+        email: emailForm.email,
+        subject: emailForm.subject,
+        message: emailForm.message
+      })
+      if (res.ok) {
+        toast.success("Email envoyé avec succès")
+        setIsCustomEmailOpen(false)
+      } else {
+        toast.error(res.error || "Erreur lors de l'envoi")
+      }
+    } catch (err) {
+      toast.error("Erreur réseau")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+
+
+
+
+
+
+
+
+
+
 
   const updateForm = (field: keyof EmployeForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -399,11 +508,39 @@ export default function AdminEmployes() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="password">Mot de passe</Label>
-          <Input id="password" type="password" value={form.password} onChange={(e) => updateForm("password", e.target.value)} placeholder="Généré auto si vide" />
+          <div className="relative">
+            <Input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              value={form.password}
+              onChange={(e) => updateForm("password", e.target.value)}
+              placeholder="Généré auto si vide"
+              className="pr-10"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? (
+                <EyeOff className="size-4 text-muted-foreground" />
+              ) : (
+                <Eye className="size-4 text-muted-foreground" />
+              )}
+            </Button>
+          </div>
         </div>
         <div className="space-y-2">
           <Label htmlFor="confirmPassword">Confirmer le mot de passe</Label>
-          <Input id="confirmPassword" type="password" value={form.confirmPassword} onChange={(e) => updateForm("confirmPassword", e.target.value)} placeholder="Généré auto si vide" />
+          <Input
+            id="confirmPassword"
+            type={showPassword ? "text" : "password"}
+            value={form.confirmPassword}
+            onChange={(e) => updateForm("confirmPassword", e.target.value)}
+            placeholder="Généré auto si vide"
+          />
         </div>
       </div>
     </div>
@@ -428,8 +565,14 @@ export default function AdminEmployes() {
           <Input id="prenom" value={form.prenom} onChange={(e) => updateForm("prenom", e.target.value)} placeholder="Jean" />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="adresse_mail">Email</Label>
+          <Label htmlFor="adresse_mail">Email pro</Label>
           <Input id="adresse_mail" type="email" value={form.adresse_mail} onChange={(e) => updateForm("adresse_mail", e.target.value)} placeholder="nom.prenom@inet.tn" />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="email_personnel_edit">Email perso</Label>
+          <Input id="email_personnel_edit" type="email" value={form.email_personnel} onChange={(e) => updateForm("email_personnel", e.target.value)} placeholder="nom@gmail.com" />
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -492,16 +635,59 @@ export default function AdminEmployes() {
           </Select>
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="newPassword">Nouveau mot de passe</Label>
-          <Input id="newPassword" type="password" value={form.password} onChange={(e) => updateForm("password", e.target.value)} placeholder="Laisser vide pour ne pas modifier" />
+      {!isChangingPassword ? (
+        <div className="flex justify-start py-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsChangingPassword(true)}
+            className="gap-2 text-primary hover:text-primary hover:bg-primary/5 border-primary/20"
+          >
+            <Lock className="size-4" />
+            Changer le mot de passe
+          </Button>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Confirmer</Label>
-          <Input id="confirmPassword" type="password" value={form.confirmPassword} onChange={(e) => updateForm("confirmPassword", e.target.value)} placeholder="Confirmer le mot de passe" />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="space-y-2">
+            <Label htmlFor="newPassword">Nouveau mot de passe</Label>
+            <div className="relative">
+              <Input
+                id="newPassword"
+                type={showPassword ? "text" : "password"}
+                value={form.password}
+                onChange={(e) => updateForm("password", e.target.value)}
+                placeholder="Saisir le nouveau mot de passe"
+                className="pr-10"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? (
+                  <EyeOff className="size-4 text-muted-foreground" />
+                ) : (
+                  <Eye className="size-4 text-muted-foreground" />
+                )}
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirmation</Label>
+            <Input
+              id="confirmPassword"
+              type={showPassword ? "text" : "password"}
+              value={form.confirmPassword}
+              onChange={(e) => updateForm("confirmPassword", e.target.value)}
+              placeholder="Confirmer le mot de passe"
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -550,7 +736,7 @@ export default function AdminEmployes() {
         </div>
 
         {/* Cartes de resume */}
-        <div className="grid gap-4 sm:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-3">
           <Card className="opacity-0 animate-fade-in-up" style={{ animationDelay: "100ms", animationFillMode: "forwards" }}>
             <CardContent className="flex items-center gap-4">
               <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
@@ -574,17 +760,6 @@ export default function AdminEmployes() {
             </CardContent>
           </Card>
           <Card className="opacity-0 animate-fade-in-up" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
-            <CardContent className="flex items-center gap-4">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-[oklch(0.55_0.17_25)]/10">
-                <Clock className="size-5 text-[oklch(0.55_0.17_25)]" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{enConge}</p>
-                <p className="text-sm text-muted-foreground">En conge</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="opacity-0 animate-fade-in-up" style={{ animationDelay: "250ms", animationFillMode: "forwards" }}>
             <CardContent className="flex items-center gap-4">
               <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
                 <Building2 className="size-5 text-primary" />
@@ -639,34 +814,44 @@ export default function AdminEmployes() {
             {isLoading ? (
               <p className="py-8 text-center text-muted-foreground">Chargement des employes...</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="bg-slate-50/50">
                     <TableRow>
-                      <TableHead>Matricule</TableHead>
-                      <TableHead>Nom complet</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Poste</TableHead>
-                      <TableHead>Departement</TableHead>
-                      <TableHead>Contrat</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead className="pl-6 text-[10px] font-black text-slate-400 uppercase tracking-widest py-3">Employé</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest py-3">Poste & Dépt</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest py-3">Contact</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest py-3">Contrat</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest py-3">Statut</TableHead>
+                      <TableHead className="text-right pr-6 text-[10px] font-black text-slate-400 uppercase tracking-widest py-3">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filtered.map((e) => (
-                      <TableRow key={e.employe_id} className="table-row-hover">
-                        <TableCell className="font-mono text-xs">{e.matricule}</TableCell>
-                        <TableCell className="font-medium">{e.prenom} {e.nom}</TableCell>
-                        <TableCell className="text-muted-foreground">{e.adresse_mail || "-"}</TableCell>
-                        <TableCell>{e.poste || "-"}</TableCell>
+                      <TableRow key={e.employe_id} className="hover:bg-slate-50/50 transition-all duration-200 group">
+                        <TableCell className="pl-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="size-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 font-black text-xs group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                              {e.nom?.[0]}{e.prenom?.[0]}
+                            </div>
+                            <div>
+                              <div className="font-bold text-slate-900 leading-none group-hover:text-indigo-600 transition-colors">{e.prenom} {e.nom}</div>
+                              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-1">{e.matricule}</div>
+                            </div>
+                          </div>
+                        </TableCell>
                         <TableCell>
-                          <div>
-                            <span>{e.nom_departement || "-"}</span>
+                          <div className="font-bold text-slate-700">{e.poste || "—"}</div>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-tight">{e.nom_departement || "—"}</span>
                             {e.sous_departement && (
-                              <span className="ml-1 text-xs text-muted-foreground">/ {e.sous_departement}</span>
+                              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-tight">/ {e.sous_departement}</span>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-xs font-bold text-slate-600 truncate max-w-[180px]">{e.adresse_mail || "—"}</div>
+                          {e.email_personnel && <div className="text-[10px] text-slate-400">{e.email_personnel}</div>}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">{e.type_contrat || "-"}</Badge>
@@ -678,6 +863,9 @@ export default function AdminEmployes() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => handleOpenCustomEmail(e)} title="Envoyer un email" className="text-primary hover:bg-primary/10">
+                              <Mail className="size-4" />
+                            </Button>
                             <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(e)} title="Modifier" className="text-sky-600 hover:bg-sky-100">
                               <Pencil className="size-4" />
                             </Button>
@@ -760,6 +948,94 @@ export default function AdminEmployes() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal Email de Bienvenue */}
+      <Dialog open={isWelcomeEmailOpen} onOpenChange={setIsWelcomeEmailOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="size-5 text-primary" />
+              Envoyer les informations de connexion
+            </DialogTitle>
+            <DialogDescription>
+              Souhaitez-vous envoyer un email de connexion à {selectedEmploye?.prenom} {selectedEmploye?.nom} ?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="welcome-email">Email personnel</Label>
+              <Input
+                id="welcome-email"
+                value={selectedEmploye?.adresse_mail || ""}
+                onChange={(e) => setSelectedEmploye(prev => prev ? ({ ...prev, adresse_mail: e.target.value }) : null)}
+                placeholder="email@exemple.com"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground bg-primary/5 p-3 rounded-lg border border-primary/10">
+              L'employé recevra son email professionnel, son mot de passe temporaire et les instructions de première connexion.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsWelcomeEmailOpen(false)}>Annuler</Button>
+            <Button onClick={handleSendWelcomeEmail} disabled={saving}>
+              {saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}
+              Envoyer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Email Personnalisé */}
+      <Dialog open={isCustomEmailOpen} onOpenChange={setIsCustomEmailOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="size-5 text-primary" />
+              Envoyer un email
+            </DialogTitle>
+            <DialogDescription>
+              Envoyer un message personnalisé à {selectedEmploye?.prenom} {selectedEmploye?.nom}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="custom-email">Destinataire</Label>
+              <Input
+                id="custom-email"
+                value={emailForm.email}
+                onChange={(e) => setEmailForm(prev => ({ ...prev, email: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="custom-subject">Sujet</Label>
+              <Input
+                id="custom-subject"
+                value={emailForm.subject}
+                onChange={(e) => setEmailForm(prev => ({ ...prev, subject: e.target.value }))}
+                placeholder="Sujet de l'email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="custom-message">Message</Label>
+              <Textarea
+                id="custom-message"
+                value={emailForm.message}
+                onChange={(e) => setEmailForm(prev => ({ ...prev, message: e.target.value }))}
+                placeholder="Votre message ici..."
+                rows={6}
+                className="resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCustomEmailOpen(false)}>Annuler</Button>
+            <Button onClick={handleSendCustomEmail} disabled={saving}>
+              {saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}
+              Envoyer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

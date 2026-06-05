@@ -31,8 +31,10 @@ import {
   type PointageRow,
 } from "@/lib/api"
 import {
-  getStatusBadgeClass, getStatusLabel, STATUS_LEGEND,
-} from "@/lib/status-colors"
+  ATTENDANCE_REGISTRY,
+  getAttendanceState,
+} from "@/lib/status-config"
+import { AttendanceBadge } from "@/components/attendance-modern"
 
 function isPresentDay(row: PointageRow) {
   if (!row) return false
@@ -119,8 +121,57 @@ function buildCalendarGrid(days: EmployeeCalendarDayRow[]) {
   return cells
 }
 
+function DayDetailPanel({ day, onClose }: { day: EmployeeCalendarDayRow; onClose: () => void }) {
+  const s = (day.statut || "ABSENT").toUpperCase()
+  const ss = (day.sous_statut || "AUCUN_POINTAGE").toUpperCase()
+  const dateObj = new Date(`${day.date}T00:00:00`)
+  const dayName = dateObj.toLocaleDateString("fr-FR", { weekday: "long" })
+  const dateLabel = dateObj.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
+
+  const ssLabel: Record<string, string> = {
+    A_L_HEURE: "À l'heure", RETARD: "En retard", AUCUN_POINTAGE: "Aucun pointage",
+    CONGE_MALADIE: "Congé maladie", CONGE_SANS_SOLDE: "Congé sans solde", CONGE_MATERNITE: "Congé maternité",
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-indigo-200 bg-white shadow-lg overflow-hidden animate-fade-in-up">
+      <div className="flex items-center justify-between bg-indigo-50 px-4 py-3 border-b border-indigo-100">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-indigo-400">{dayName}</p>
+          <p className="text-base font-black text-indigo-900 capitalize">{dateLabel}</p>
+        </div>
+        <button onClick={onClose} className="rounded-full p-1.5 text-indigo-400 hover:bg-indigo-100 transition-colors">
+          ✕
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3">
+        <div className="col-span-2 sm:col-span-3 flex flex-wrap gap-2 mb-1">
+          <span className={`px-2.5 py-1 rounded-md text-xs font-black uppercase tracking-wider ${s === "PRESENT" ? "bg-green-500 text-white" : "bg-red-500 text-white"}`}>{s === "PRESENT" ? "PRÉSENT" : "ABSENT"}</span>
+          <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-gray-100 text-gray-700">{ssLabel[ss] ?? ss}</span>
+          {day.has_mission && <span className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-purple-100 text-purple-800">💼 {day.type_mission || "Mission"}</span>}
+          {day.has_formation && <span className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-indigo-100 text-indigo-800">🎓 {day.type_formation || "Formation"}</span>}
+        </div>
+
+        {[
+          { label: "Entrée", value: formatTime(day.heure_entree) },
+          { label: "Sortie", value: formatTime(day.heure_sortie) },
+          { label: "Durée travail", value: day.duree_travail_formattee || "-" },
+          { label: "Durée pause", value: day.duree_pause_formattee || "-" },
+        ].map(({ label, value }) => (
+          <div key={label} className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</p>
+            <p className="text-sm font-bold text-gray-900 mt-0.5">{value}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function MonthCalendar({ days }: { days: EmployeeCalendarDayRow[] }) {
   const cells = useMemo(() => buildCalendarGrid(days), [days])
+  const [selectedDay, setSelectedDay] = useState<EmployeeCalendarDayRow | null>(null)
+  const todayStr = new Date().toISOString().slice(0, 10)
 
   if (days.length === 0) {
     return (
@@ -134,9 +185,7 @@ function MonthCalendar({ days }: { days: EmployeeCalendarDayRow[] }) {
     <div className="space-y-3">
       <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {DAY_LABELS.map((label) => (
-          <div key={label} className="py-1">
-            {label}
-          </div>
+          <div key={label} className="py-1">{label}</div>
         ))}
       </div>
 
@@ -151,102 +200,81 @@ function MonthCalendar({ days }: { days: EmployeeCalendarDayRow[] }) {
             )
           }
 
-          const isRetard = day.statut === "En retard" || day.statut === "Retard"
-          const isMission = day.statut === "Mission"
-          const isFormation = day.statut === "Formation"
-          const isConge = day.statut === "Conge"
-          const isPresent = day.statut === "Present" || isRetard
-          const statusClass = getStatusBadgeClass(day.statut)
+          const isDimanche = new Date(`${day.date}T00:00:00`).getDay() === 0
+          const isToday = day.date === todayStr
+          const isSelected = selectedDay?.date === day.date
+          const s = (day.statut || "ABSENT").toUpperCase()
+          const ss = (day.sous_statut || "AUCUN_POINTAGE").toUpperCase()
+
+          let ui = { bg: "bg-red-50 border-red-100", badge: "ABSENT", badgeClass: "bg-red-500 text-white", subtitle: "Aucun pointage", subtitleClass: "text-red-800 font-bold", icon: "❌" }
+
+          if (isDimanche) {
+            ui = { bg: "bg-gray-50 border-transparent", badge: "REPOS", badgeClass: "bg-gray-200 text-gray-700", subtitle: "Repos hebdomadaire", subtitleClass: "text-gray-500 font-medium", icon: "😴" }
+          } else if (s === "PRESENT") {
+            if (ss === "RETARD") {
+              ui = { bg: "bg-orange-50 border-orange-200", badge: "PRÉSENT", badgeClass: "bg-orange-500 text-white", subtitle: "En retard", subtitleClass: "text-orange-800 font-bold", icon: "⚠️" }
+            } else {
+              ui = { bg: "bg-green-50 border-green-200", badge: "PRÉSENT", badgeClass: "bg-green-500 text-white", subtitle: "À l'heure", subtitleClass: "text-green-800 font-bold", icon: "✅" }
+            }
+          } else {
+            if (ss === "CONGE_MALADIE") ui = { bg: "bg-blue-50 border-blue-200", badge: "ABSENT", badgeClass: "bg-blue-500 text-white", subtitle: "Congé maladie", subtitleClass: "text-blue-800 font-bold", icon: "🩺" }
+            else if (ss === "CONGE_SANS_SOLDE") ui = { bg: "bg-stone-100 border-orange-200", badge: "ABSENT", badgeClass: "bg-stone-500 text-white", subtitle: "Sans solde", subtitleClass: "text-orange-800 font-bold", icon: "⏸️" }
+            else if (ss === "CONGE_MATERNITE") ui = { bg: "bg-purple-50 border-purple-200", badge: "ABSENT", badgeClass: "bg-purple-500 text-white", subtitle: "Congé maternité", subtitleClass: "text-purple-800 font-bold", icon: "👶" }
+          }
 
           return (
             <div
               key={day.date}
-              className={`min-h-28 rounded-xl border p-3 shadow-sm transition-all ${statusClass}`}
+              onClick={() => !isDimanche && setSelectedDay(isSelected ? null : day)}
+              className={`min-h-28 rounded-xl border-2 p-3 shadow-sm transition-all ${ui.bg} ${isToday ? "border-indigo-500 ring-2 ring-indigo-200" : isSelected ? "border-indigo-300 ring-1 ring-indigo-100" : "border-transparent"
+                } ${!isDimanche ? "cursor-pointer hover:shadow-md hover:-translate-y-0.5" : ""}`}
             >
               <div className="mb-2 flex items-start justify-between gap-2">
-                <div className="text-sm font-bold">
+                <div className={`text-sm font-black ${isDimanche ? "text-gray-400" : isToday ? "text-indigo-700" : "text-gray-900"}`}>
                   {new Date(`${day.date}T00:00:00`).getDate()}
+                  {isToday && <span className="ml-1 text-[9px] font-bold text-indigo-500 uppercase">Auj.</span>}
                 </div>
-                <div className="rounded-full bg-white/25 px-2 py-0.5 text-[10px] font-bold border border-white/20">
-                  {getStatusLabel(day.statut)}
-                </div>
+                <div className={`rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider shadow-sm ${ui.badgeClass}`}>{ui.badge}</div>
               </div>
 
-              {isPresent && (
-                <div className="space-y-1 text-xs">
-                  {day.heure_entree || day.heure_sortie ? (
-                    <div className="font-medium opacity-90 space-y-0.5">
-                      {day.heure_entree && <div>Entrée : {formatTime(day.heure_entree)}</div>}
-                      {day.heure_sortie && <div>Sortie : {formatTime(day.heure_sortie)}</div>}
-                      {day.heure_entree_pause && (
-                        <div>
-                          Pause : {formatTime(day.heure_entree_pause)} - {formatTime(day.heure_sortie_pause)}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="font-medium opacity-60 italic">Aucun pointage</div>
-                  )}
-                  
-                  {day.duree_travail != null && (
-                    <div className="text-sm font-bold pt-0.5">
-                      {formatDurationFromHours(day.duree_travail)}
-                    </div>
-                  )}
-                  
-                  {isRetard && (
-                    <div className="inline-flex rounded-full bg-white/25 px-2 py-0.5 text-[10px] font-semibold border border-white/20">
-                      Retard
-                    </div>
-                  )}
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-xs">{ui.icon}</span>
+                <span className={`text-[11px] uppercase tracking-wide ${ui.subtitleClass}`}>{ui.subtitle}</span>
+              </div>
+
+              {(day.has_mission || day.has_formation) && !isDimanche && (
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {day.has_mission && <div className="flex items-center gap-1 bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.5 rounded text-[10px] font-bold">💼 {day.type_mission || "Mission"}</div>}
+                  {day.has_formation && <div className="flex items-center gap-1 bg-indigo-100 text-indigo-800 border border-indigo-200 px-1.5 py-0.5 rounded text-[10px] font-bold">🎓 {day.type_formation || "Formation"}</div>}
                 </div>
               )}
 
-              {day.statut === "Absent" && (
-                <div className="pt-2 text-xs font-semibold opacity-80">❌ Absent</div>
-              )}
-
-              {isConge && (
-                <div className="pt-2 text-xs font-semibold opacity-90">
-                  🏝️ {day.type_conge || "Congé"}
-                </div>
-              )}
-
-              {isMission && (
-                <div className="pt-2 space-y-1">
-                  <div className="text-[13px]">🚗</div>
-                  <div className="text-xs font-semibold opacity-90">
-                    {day.type_mission || "Mission"}
+              {s === "PRESENT" && !isDimanche && (
+                <div className="space-y-1 mt-2 border-t border-black/5 pt-2">
+                  <div className="flex justify-between items-center text-[11px] font-semibold text-gray-700">
+                    <span>Horaires</span>
+                    <span>{formatTime(day.heure_entree)} → {formatTime(day.heure_sortie)}</span>
                   </div>
-                  {(day.heure_entree || day.heure_sortie) ? (
-                    <div className="text-[10px] opacity-80 font-medium">
-                      {day.heure_entree && <div>Entrée : {formatTime(day.heure_entree)}</div>}
-                      {day.heure_sortie && <div>Sortie : {formatTime(day.heure_sortie)}</div>}
+                  {day.duree_pause_formattee && (
+                    <div className="flex justify-between items-center text-[11px] font-medium text-gray-600">
+                      <span>Pause</span><span>{day.duree_pause_formattee}</span>
                     </div>
-                  ) : (
-                    <div className="text-[10px] opacity-60 italic">Aucun pointage</div>
                   )}
+                  <div className="flex justify-between items-center text-[11px] font-black text-gray-900 bg-white/50 px-1.5 py-0.5 rounded">
+                    <span>Travail</span><span>{day.duree_travail_formattee || "-"}</span>
+                  </div>
                 </div>
-              )}
-
-              {isFormation && (
-                <div className="pt-2 space-y-1">
-                  <div className="text-[13px]">🎓</div>
-                  <div className="text-xs font-semibold opacity-90">Formation</div>
-                  <div className="text-[10px] opacity-70">{day.type_formation || "Apprentissage"}</div>
-                </div>
-              )}
-
-              {day.statut === "Repos" && (
-                <div className="pt-2 text-xs font-semibold opacity-60">😴 Repos</div>
               )}
             </div>
           )
         })}
       </div>
+
+      {selectedDay && <DayDetailPanel day={selectedDay} onClose={() => setSelectedDay(null)} />}
     </div>
   )
 }
+
 
 export default function PointagePage() {
   const { user } = useAuth()
@@ -257,10 +285,7 @@ export default function PointagePage() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
   })
 
-  const { data: allRows = [] } = useSWR(
-    employeId ? ["pointage-full", employeId] : null,
-    () => fetchPointage(employeId!)
-  )
+
 
   const { data: monthlyRows = [], isLoading } = useSWR(
     employeId ? ["pointage-monthly", employeId, selectedMonth] : null,
@@ -272,23 +297,19 @@ export default function PointagePage() {
     () => fetchEmployeeCalendar(employeId!, selectedMonth)
   )
 
-  const totalHours = useMemo(() => allRows.reduce((sum, r) => sum + (Number(r.duree_travail) || 0), 0), [allRows])
-  const presentDays = useMemo(() => allRows.filter((r) => isPresentDay(r)).length, [allRows])
-  const retardDays = useMemo(() => allRows.filter(
-    (r) => {
-      const s = (r.statut || "").toLowerCase()
-      return s === "en retard" || s === "retard" || (r.retard_minutes || 0) > 0
-    }
-  ).length, [allRows])
-  const totalPauseMinutes = useMemo(() => allRows.reduce((sum, r) => sum + (Number(r.duree_pause) || 0), 0), [allRows])
-
-  const monthlyHours = useMemo(() => monthlyRows.reduce((sum, r) => sum + (Number(r.duree_travail) || 0), 0), [monthlyRows])
+  const monthlyTotalMinutes = useMemo(() => monthlyRows.reduce((sum, r) => sum + (Number(r.duree_travail) || 0), 0), [monthlyRows])
   const monthlyPresentDays = useMemo(() => monthlyRows.filter((r) => isPresentDay(r)).length, [monthlyRows])
   const monthlyRetardDays = useMemo(() => monthlyRows.filter((r) => {
     const s = (r.statut || "").toLowerCase()
     return s === "en retard" || s === "retard" || (r.retard_minutes || 0) > 0
   }).length, [monthlyRows])
   const monthlyPauseMinutes = useMemo(() => monthlyRows.reduce((sum, r) => sum + (Number(r.duree_pause) || 0), 0), [monthlyRows])
+
+  const formatTotalMinutes = (mins: number) => {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${h}h ${m.toString().padStart(2, '0')}min`;
+  }
 
   return (
     <>
@@ -301,55 +322,7 @@ export default function PointagePage() {
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardContent className="flex items-center gap-4">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
-                <Calendar className="size-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{presentDays}</p>
-                <p className="text-sm text-muted-foreground">Jours présents</p>
-              </div>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardContent className="flex items-center gap-4">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-orange-100">
-                <Clock className="size-5 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{retardDays}</p>
-                <p className="text-sm text-muted-foreground">Retards</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="flex items-center gap-4">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100">
-                <Timer className="size-5 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{totalHours.toFixed(1)}h</p>
-                <p className="text-sm text-muted-foreground">Heures totales</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="flex items-center gap-4">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-indigo-100">
-                <Coffee className="size-5 text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{formatDuration(totalPauseMinutes)}</p>
-                <p className="text-sm text-muted-foreground">Temps de pause</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
 
         <Card className="animate-fade-in-up">
           <CardHeader>
@@ -395,7 +368,7 @@ export default function PointagePage() {
               <div className="flex items-center gap-3">
                 <Timer className="size-5 text-emerald-600" />
                 <div>
-                  <p className="text-2xl font-bold">{monthlyHours.toFixed(1)}h</p>
+                  <p className="text-2xl font-bold">{formatTotalMinutes(monthlyTotalMinutes)}</p>
                   <p className="text-sm text-muted-foreground">Heures travaillées</p>
                 </div>
               </div>
@@ -403,7 +376,7 @@ export default function PointagePage() {
               <div className="flex items-center gap-3">
                 <Coffee className="size-5 text-indigo-600" />
                 <div>
-                  <p className="text-2xl font-bold">{formatDuration(monthlyPauseMinutes)}</p>
+                  <p className="text-2xl font-bold">{formatTotalMinutes(monthlyPauseMinutes)}</p>
                   <p className="text-sm text-muted-foreground">Temps de pause</p>
                 </div>
               </div>
@@ -416,10 +389,10 @@ export default function PointagePage() {
             )}
 
             <div className="flex flex-wrap gap-3 text-xs">
-              {STATUS_LEGEND.map(({ dot, label }) => (
-                <div key={label} className="inline-flex items-center gap-2 rounded-full border px-3 py-1">
-                  <span className={`size-2.5 rounded-full ${dot}`} />
-                  <span className="font-medium">{label}</span>
+              {Object.values(ATTENDANCE_REGISTRY).map(cfg => (
+                <div key={cfg.id} className="inline-flex items-center gap-2 rounded-full border px-3 py-1">
+                  <span className={`size-2.5 rounded-full ${cfg.color.dot}`} />
+                  <span className="font-medium">{cfg.label}</span>
                 </div>
               ))}
             </div>
@@ -429,7 +402,7 @@ export default function PointagePage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Détail des pointages de {getMonthLabel(selectedMonth)}
+              Détail des pointages — {getMonthLabel(selectedMonth)}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -438,77 +411,62 @@ export default function PointagePage() {
             ) : monthlyRows.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-12 text-center">
                 <Clock className="size-8 text-muted-foreground/50" />
-                <p className="text-sm text-muted-foreground">
-                  Aucun pointage trouvé pour ce mois
-                </p>
+                <p className="text-sm text-muted-foreground">Aucun pointage trouvé pour ce mois</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="bg-gray-50/50">
                     <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Entrée</TableHead>
-                      <TableHead>Sortie</TableHead>
-                      <TableHead className="text-center">Début Pause</TableHead>
-                      <TableHead className="text-center">Fin Pause</TableHead>
-                      <TableHead className="text-center">Durée Pause</TableHead>
-                      <TableHead className="text-center">Pause Complète</TableHead>
-                      <TableHead>Durée Travail</TableHead>
-                      <TableHead>Retard</TableHead>
-                      <TableHead>Statut</TableHead>
+                      <TableHead className="font-bold text-gray-700">Date</TableHead>
+                      <TableHead className="font-bold text-gray-700">Entrée</TableHead>
+                      <TableHead className="font-bold text-gray-700">Sortie</TableHead>
+                      <TableHead className="font-bold text-gray-700 text-center">Début Pause</TableHead>
+                      <TableHead className="font-bold text-gray-700 text-center">Fin Pause</TableHead>
+                      <TableHead className="font-bold text-gray-700 text-center">Durée Pause</TableHead>
+                      <TableHead className="font-bold text-gray-700">Travail</TableHead>
+                      <TableHead className="font-bold text-gray-700">Retard</TableHead>
+                      <TableHead className="font-bold text-gray-700">Statut</TableHead>
                     </TableRow>
                   </TableHeader>
-
                   <TableBody>
-                    {monthlyRows.map((r) => (
-                      <TableRow key={r.pointage_id}>
-                        <TableCell>{r.date_pointage}</TableCell>
-                        <TableCell>{formatTime(r.heure_entree)}</TableCell>
-                        <TableCell>{formatTime(r.heure_sortie)}</TableCell>
-                        <TableCell className="text-center">
-                          {formatTime(r.heure_entree_pause)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {formatTime(r.heure_sortie_pause)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {r.duree_pause != null ? formatDuration(r.duree_pause) : "-"}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {r.heure_entree_pause ? (
-                            r.is_pause_complete ? (
-                              <span className="inline-flex items-center gap-1 text-green-600">
-                                <CheckCircle className="size-4" /> Oui
-                              </span>
+                    {monthlyRows.map((r) => {
+                      const dateObj = new Date(`${r.date_pointage}T00:00:00`)
+                      const dayLabel = dateObj.toLocaleDateString("fr-FR", { weekday: "short" })
+                      const dateLabel = dateObj.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+
+                      return (
+                        <TableRow key={r.pointage_id} className="hover:bg-slate-50/50 transition-colors">
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold uppercase text-gray-400 leading-none mb-0.5">{dayLabel}</span>
+                              <span className="font-black text-gray-900">{dateLabel}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-semibold text-gray-700">{formatTime(r.heure_entree)}</TableCell>
+                          <TableCell className="font-semibold text-gray-700">{formatTime(r.heure_sortie)}</TableCell>
+                          <TableCell className="text-center text-gray-600">{formatTime(r.heure_entree_pause)}</TableCell>
+                          <TableCell className="text-center text-gray-600">{formatTime(r.heure_sortie_pause)}</TableCell>
+                          <TableCell className="text-center text-gray-500 font-medium">{r.duree_pause_formattee || "-"}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1.5 font-black text-indigo-700 bg-indigo-50/50 px-2 py-1 rounded-md w-fit">
+                              <Timer className="size-3.5" />
+                              {r.duree_travail_formattee || "-"}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {r.retard_minutes ? (
+                              <span className="text-orange-600 font-bold">+{r.retard_minutes} min</span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-yellow-500">
-                                <XCircle className="size-4" /> Non
-                              </span>
-                            )
-                          ) : (
-                            "-"
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {r.duree_travail != null ? `${r.duree_travail.toFixed(1)}h` : "-"}
-                        </TableCell>
-                        <TableCell>
-                          {r.retard_minutes && r.retard_minutes > 0 ? (
-                            <span className="text-red-600">{r.retard_minutes} min</span>
-                          ) : (
-                            "-"
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full ${getStatusBadgeClass(r.statut)
-                            }`}>
-                            {r.statut === 'formation' && <span className="text-[10px]">🎓</span>}
-                            {getStatusLabel(r.statut)}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                              <span className="text-emerald-600 font-medium">–</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <AttendanceBadge state={getAttendanceState(r.statut, r.sous_statut)} />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>

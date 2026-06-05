@@ -1,6 +1,6 @@
 # backend/services/employe_service.py
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from backend.repositories.employe_repo import EmployeRepository
 from backend.repositories.utilisateur_repo import UtilisateurRepository
 from backend.services.utilisateur_service import UtilisateurService
@@ -45,7 +45,7 @@ class EmployeService:
     # -----------------------------
     # Ajouter un employé
     # -----------------------------
-    def add(self, data: Dict, background_tasks=None) -> Dict:
+    def add(self, data: Dict) -> Dict:
         required = ["matricule", "nom", "prenom", "departement_id", "email_personnel"]
         for r in required:
             if r not in data or not data[r]:
@@ -109,24 +109,6 @@ class EmployeService:
 
             print(f"[LOG] Utilisateur créé : {username}")
 
-            # Envoi de l'email automatique (Background Task)
-            if personal_email and background_tasks is not None:
-                print("[LOG] Ajout de l'envoi email aux tâches de fond (BackgroundTasks)...")
-                from backend.utils.email_sender import send_welcome_email
-                background_tasks.add_task(
-                    send_welcome_email, 
-                    personal_email=personal_email, 
-                    pro_email=pro_email, 
-                    password=password, 
-                    role=role, 
-                    first_name=data["prenom"], 
-                    last_name=data["nom"],
-                    poste=data.get("poste", "Non spécifié"),
-                    type_contrat=data.get("type_contrat", "Non spécifié"),
-                    statut=data.get("statut", "Actif")
-                )
-            elif personal_email:
-                print("[LOG] Attention: email_personnel renseigné mais aucun background_tasks soumis !")
 
             return {
                 "ok": True,
@@ -230,4 +212,67 @@ class EmployeService:
             "stats": stats,
             "total": len(employes)
         }
+
+    # -----------------------------
+    # Envoyer l'email de bienvenue manuellement
+    # -----------------------------
+    def send_welcome_email(self, employe_id: int, background_tasks, email_override: str = None, password: str = None) -> Dict:
+        emp = self.repo.get_by_id(employe_id)
+        if not emp:
+            return {"ok": False, "error": "Employé introuvable."}
+
+        personal_email = email_override or emp.get("email_personnel") or emp.get("adresse_mail")
+        if not personal_email:
+            return {"ok": False, "error": "Aucune adresse email trouvée pour cet employé."}
+
+        # On a besoin du mot de passe... mais il est haché en DB.
+        # On utilise le mot de passe fourni ou le placeholder si absent.
+        pwd_to_send = password or "[Utilisez votre mot de passe actuel]"
+
+        from backend.utils.email_sender import send_welcome_email
+        background_tasks.add_task(
+            send_welcome_email,
+            personal_email=personal_email,
+            pro_email=emp.get("adresse_mail") or "",
+            password=pwd_to_send,
+            role=emp.get("role") or "EMPLOYEE",
+            first_name=emp.get("prenom") or "",
+            last_name=emp.get("nom") or "",
+            poste=emp.get("poste") or "Non spécifié",
+            type_contrat=emp.get("type_contrat") or "Non spécifié",
+            statut=emp.get("statut") or "Actif"
+        )
+        
+        return {"ok": True, "message": f"Email de bienvenue en cours d'envoi à {personal_email}"}
+
+    # -----------------------------
+    # Envoyer les accès manuellement
+    # -----------------------------
+    def send_credentials_email(self, employe_id: int, background_tasks, new_password: str = None) -> Dict:
+        emp = self.repo.get_by_id(employe_id)
+        if not emp:
+            return {"ok": False, "error": "Employé introuvable."}
+
+        personal_email = emp.get("email_personnel") or emp.get("adresse_mail")
+        if not personal_email:
+            return {"ok": False, "error": "Aucune adresse email trouvée pour cet employé."}
+
+        # Si pas de nouveau mot de passe fourni, on met une mention informative
+        pwd_to_send = new_password or "[Votre mot de passe actuel]"
+
+        from backend.utils.email_sender import send_welcome_email
+        background_tasks.add_task(
+            send_welcome_email,
+            personal_email=personal_email,
+            pro_email=emp.get("adresse_mail") or "",
+            password=pwd_to_send,
+            role=emp.get("role") or "EMPLOYEE",
+            first_name=emp.get("prenom") or "",
+            last_name=emp.get("nom") or "",
+            poste=emp.get("poste") or "Non spécifié",
+            type_contrat=emp.get("type_contrat") or "Non spécifié",
+            statut=emp.get("statut") or "Actif"
+        )
+
+        return {"ok": True, "message": f"Accès envoyés avec succès à {personal_email}"}
 

@@ -1,12 +1,29 @@
+import json
 from typing import Dict, List, Optional
 
 from backend.db import Database
 
 
+def _serialize_programme(programme: list | None) -> str | None:
+    if not programme:
+        return None
+    return json.dumps(programme, ensure_ascii=False)
+
+
+def _deserialize_programme(raw: str | None) -> list | None:
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
 class FormationRepository:
     def __init__(self):
         self.db = Database()
-        self.ensure_schema()
+        # Schema creation is deferred until the first repository operation.
+        # This avoids connecting to SQL Server during FastAPI import.
 
     def ensure_schema(self) -> None:
         self.db.execute(
@@ -63,6 +80,18 @@ class FormationRepository:
             END;
             """
         )
+        def _add_column_if_missing(cursor, table: str, column: str, definition: str):
+            cursor.execute("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_NAME = ? AND COLUMN_NAME = ?
+            """, (table, column))
+            if cursor.fetchone()[0] == 0:
+                cursor.execute(f"ALTER TABLE {table} ADD {column} {definition}")
+
+        with self.db.get_cursor() as cursor:
+            _add_column_if_missing(cursor, "Formation", "heure_debut", "VARCHAR(5) NULL")
+            _add_column_if_missing(cursor, "Formation", "heure_fin", "VARCHAR(5) NULL")
+            _add_column_if_missing(cursor, "Formation", "programme_details", "NVARCHAR(MAX) NULL")
 
     def get_all(self) -> List[Dict]:
         sql = """
@@ -77,6 +106,9 @@ class FormationRepository:
             f.organisateur,
             f.type_formation,
             f.lieu,
+            f.heure_debut,
+            f.heure_fin,
+            f.programme_details,
             ISNULL(i.nb_inscrits, 0) AS nb_inscrits,
             CASE
                 WHEN f.nombre_places IS NULL THEN NULL
@@ -90,7 +122,10 @@ class FormationRepository:
         ) i
         ORDER BY f.date_debut DESC, f.formation_id DESC;
         """
-        return self.db.fetch_all(sql)
+        rows = self.db.fetch_all(sql)
+        for row in rows:
+            row["programme_details"] = _deserialize_programme(row.get("programme_details"))
+        return rows
 
     def get_by_id(self, formation_id: int) -> Optional[Dict]:
         sql = """
@@ -105,6 +140,9 @@ class FormationRepository:
             f.organisateur,
             f.type_formation,
             f.lieu,
+            f.heure_debut,
+            f.heure_fin,
+            f.programme_details,
             ISNULL(i.nb_inscrits, 0) AS nb_inscrits,
             CASE
                 WHEN f.nombre_places IS NULL THEN NULL
@@ -118,7 +156,10 @@ class FormationRepository:
         ) i
         WHERE f.formation_id = ?;
         """
-        return self.db.fetch_one(sql, [formation_id])
+        row = self.db.fetch_one(sql, [formation_id])
+        if row:
+            row["programme_details"] = _deserialize_programme(row.get("programme_details"))
+        return row
 
     def find_duplicate(self, titre: str, date_debut: str, exclude_id: int | None = None) -> Optional[Dict]:
         sql = """
@@ -136,8 +177,8 @@ class FormationRepository:
     def insert(self, data: Dict) -> int:
         sql = """
         INSERT INTO dbo.Formation
-        (titre, description, date_debut, date_fin, duree, nombre_places, organisateur, type_formation, lieu)
-        VALUES (?, ?, CAST(? AS DATE), CAST(? AS DATE), ?, ?, ?, ?, ?);
+        (titre, description, date_debut, date_fin, duree, nombre_places, organisateur, type_formation, lieu, heure_debut, heure_fin, programme_details)
+        VALUES (?, ?, CAST(? AS DATE), CAST(? AS DATE), ?, ?, ?, ?, ?, ?, ?, ?);
         """
         return self.db.execute_and_identity(
             sql,
@@ -151,6 +192,9 @@ class FormationRepository:
                 data.get("organisateur"),
                 data.get("type_formation"),
                 data.get("lieu"),
+                data.get("heure_debut"),
+                data.get("heure_fin"),
+                _serialize_programme(data.get("programme_details")),
             ],
         )
 
@@ -167,6 +211,9 @@ class FormationRepository:
             organisateur = ?,
             type_formation = ?,
             lieu = ?,
+            heure_debut = ?,
+            heure_fin = ?,
+            programme_details = ?,
             date_modification = SYSDATETIME()
         WHERE formation_id = ?;
         """
@@ -182,6 +229,9 @@ class FormationRepository:
                 data.get("organisateur"),
                 data.get("type_formation"),
                 data.get("lieu"),
+                data.get("heure_debut"),
+                data.get("heure_fin"),
+                _serialize_programme(data.get("programme_details")),
                 formation_id,
             ],
         )

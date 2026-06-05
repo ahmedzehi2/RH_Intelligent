@@ -22,6 +22,10 @@ class AdminAdd(BaseModel):
     duree_travail: float | None = None
     retard_minutes: int | None = None
     statut: str | None = None
+    sous_statut: str | None = None
+    demande_conge_id: int | None = None
+    demande_mission_id: int | None = None
+    demande_formation_id: int | None = None
 
 class AdminEdit(BaseModel):
     pointage_id: int
@@ -36,6 +40,10 @@ class AdminEdit(BaseModel):
     duree_travail: float | None = None
     retard_minutes: int | None = None
     statut: str | None = None
+    sous_statut: str | None = None
+    demande_conge_id: int | None = None
+    demande_mission_id: int | None = None
+    demande_formation_id: int | None = None
 
 
 # ===============================

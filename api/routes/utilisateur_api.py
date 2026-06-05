@@ -48,3 +48,8 @@ def update_mot_de_passe(user_id: int, payload: UpdatePasswordRequest):
 @router.delete("/{user_id}", dependencies=[Depends(verify_admin_role)])
 def supprimer_utilisateur(user_id: int):
     return service.delete(user_id)
+
+
+@router.get("/employe/{employe_id}/status", dependencies=[Depends(verify_admin_role)])
+def get_status_by_employe_id(employe_id: int):
+    return service.get_status_by_employe_id(employe_id)

@@ -340,7 +340,7 @@ export default function ValidationsPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Employe</TableHead>
-                        <TableHead>Lieu</TableHead>
+                        <TableHead>Lieu de mission</TableHead>
                         <TableHead>Type</TableHead>
                         <TableHead>Debut</TableHead>
                         <TableHead>Fin</TableHead>
@@ -352,7 +352,7 @@ export default function ValidationsPage() {
                       {missions.map((m) => (
                         <TableRow key={m.mission_id}>
                           <TableCell className="font-medium">{m.employe_nom}</TableCell>
-                          <TableCell>{m.lieu}</TableCell>
+                          <TableCell>{m.lieu_mission}</TableCell>
                           <TableCell>{m.type_mission}</TableCell>
                           <TableCell>{m.date_debut}</TableCell>
                           <TableCell>{m.date_fin}</TableCell>

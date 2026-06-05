@@ -6,18 +6,31 @@ from contextlib import contextmanager
 
 class Database:
     def __init__(self):
-        self.conn = pyodbc.connect(
-            f"DRIVER={{{config.DB_DRIVER}}};"
-            f"SERVER={config.DB_SERVER};"
-            f"DATABASE={config.DB_DATABASE};"
-            "Trusted_Connection=yes;"
-            "Mars_Connection=yes;",
-            autocommit=True
-        )
-        self.conn.setencoding("utf-8")
+        self.conn = None
+
+    def _connect(self):
+        if self.conn is None:
+            conn_parts = [
+                f"DRIVER={{{config.DB_DRIVER}}}",
+                f"SERVER={config.DB_SERVER}",
+                f"DATABASE={config.DB_DATABASE}",
+            ]
+
+            if config.DB_USE_TRUSTED_CONNECTION and not (config.DB_UID or config.DB_PWD):
+                conn_parts.append("Trusted_Connection=yes")
+            else:
+                if config.DB_UID:
+                    conn_parts.append(f"UID={config.DB_UID}")
+                if config.DB_PWD:
+                    conn_parts.append(f"PWD={config.DB_PWD}")
+
+            conn_parts.append("Mars_Connection=yes")
+            conn_string = ";".join(conn_parts) + ";"
+            self.conn = pyodbc.connect(conn_string, autocommit=True)
 
     @contextmanager
     def get_cursor(self):
+        self._connect()
         cursor = self.conn.cursor()
         try:
             yield cursor
@@ -53,4 +66,6 @@ class Database:
             return int(row[0]) if row and row[0] is not None else None
 
     def close(self):
-        self.conn.close()
+        if self.conn is not None:
+            self.conn.close()
+            self.conn = None
